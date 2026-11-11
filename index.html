@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
-<title>Termark 本地解密工具</title>
+<title>Termark Local Decryption Tool</title>
 <style>
   :root { color-scheme: light dark; --bg: #f1f4f3; --panel: #fff; --ink: #172722; --sub: #51645d; --border: #b8c8c0; --accent: #136047; --button-text: #fff; --error: #9e271f; }
   @media (prefers-color-scheme: dark) { :root { --bg: #14201d; --panel: #1a2a24; --ink: #e7f0eb; --sub: #aec2b9; --border: #637a6f; --accent: #95e1be; --button-text: #13271e; --error: #ffb4a9; } }
@@ -13,6 +13,7 @@
   main { max-width: 700px; margin: 0 auto; padding: clamp(22px, 6vw, 60px) 18px; }
   h1 { font-size: clamp(25px, 6vw, 36px); margin: 0; line-height: 1.2; letter-spacing: -.02em; }
   header p { color: var(--sub); margin: 12px 0 25px; }
+  .topbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
   form { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: clamp(16px, 5vw, 30px); }
   fieldset { padding: 0; margin: 0; border: 0; min-width: 0; }
   label { display: block; margin: 0 0 15px; font-weight: 600; }
@@ -37,55 +38,56 @@
 </head>
 <body>
 <main>
+  <div class="topbar"><button class="secondary" id="language" type="button" aria-label="Switch language">English</button></div>
   <header>
-    <h1>Termark 本地解密工具</h1>
-    <p>数据库、密钥和解密结果仅在当前浏览器页面处理。</p>
+    <h1 data-i18n="title">Termark Local Decryption Tool</h1>
+    <p data-i18n="intro">Decrypt Termark data locally in your browser. Files, keys, and results stay on this device.</p>
   </header>
   <form id="form" autocomplete="off">
     <fieldset id="controls">
-      <label>解密来源
-        <select id="source"><option value="database">Termark 数据库</option><option value="sync">同步快照（.dat）</option><option value="field">单个加密字段</option></select>
+      <label><span data-i18n="source">Source</span>
+        <select id="source"><option value="database">Termark database</option><option value="sync">Sync snapshot (.dat)</option><option value="field">Single encrypted field</option></select>
       </label>
       <div id="database-inputs">
-        <label>数据库
+        <label><span data-i18n="database">Database</span>
           <input id="database" type="file" accept=".db,.bolt,.bbolt">
-          <span class="hint">建议先退出 Termark，再选择 <code>termark.db</code> 的副本。</span>
+          <span class="hint" data-i18n="database-hint">Quit Termark first, then choose a copy of <code>termark.db</code>.</span>
         </label>
-        <label>查找主机或凭证 <input id="filter" type="search" placeholder="名称或 IP 地址"></label>
-        <label>要解密的记录 <select id="target"><option value="">请先选择数据库</option></select></label>
+        <label><span data-i18n="find-record">Find a host or credential</span> <input id="filter" type="search" placeholder="Name or IP address"></label>
+        <label><span data-i18n="record">Record</span> <select id="target"><option value="">Choose a database first</option></select></label>
       </div>
       <div id="field-inputs" hidden>
-        <label>密文字段 <textarea id="ciphertext" rows="3" placeholder="enc:v1:…" spellcheck="false"></textarea></label>
+        <label><span data-i18n="encrypted-field">Encrypted field</span> <textarea id="ciphertext" rows="3" placeholder="enc:v1:…" spellcheck="false"></textarea></label>
       </div>
       <div id="sync-inputs" hidden>
-        <label>同步快照
+        <label><span data-i18n="sync-snapshot">Sync snapshot</span>
           <input id="sync-file" type="file">
-          <span class="hint">选择 Termark 同步文件（.dat 或 .json）。同步密码保存在钥匙串时，条目名为 <code>sync-passphrase</code>。</span>
+          <span class="hint" data-i18n="sync-hint">Choose a Termark sync file (.dat or .json). If saved in Keychain, the sync password entry is named <code>sync-passphrase</code>.</span>
         </label>
       </div>
-      <label id="key-type">密钥类型
+      <label id="key-type"><span data-i18n="key-type">Key type</span>
         <select id="mode">
-          <option value="raw">32 字节本地数据密钥</option>
-          <option value="passphrase">本地加密口令（从数据库读取派生参数）</option>
+          <option value="raw">32-byte local data key</option>
+          <option value="passphrase">Local encryption passphrase (derive parameters from database)</option>
         </select>
       </label>
-      <label><span id="secret-label">本地数据密钥</span>
+      <label><span id="secret-label">Local data key</span>
         <input id="secret" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" required>
       </label>
       <div class="actions">
-        <button type="submit">解密</button>
-        <button class="secondary" id="clear" type="button">清除密钥和结果</button>
+        <button type="submit" data-i18n="decrypt">Decrypt</button>
+        <button class="secondary" id="clear" type="button" data-i18n="clear">Clear key and results</button>
       </div>
     </fieldset>
     <p id="status" role="status"></p>
     <div id="results"></div>
   </form>
   <details>
-    <summary>数据库和密钥在哪里</summary>
+    <summary data-i18n="where">Where to find the database and keys</summary>
     <ul>
-      <li>macOS 数据库通常位于 <code>~/Library/Application Support/Termark/backend/termark.db</code>。</li>
-      <li>Windows 安装版通常位于 <code>%AppData%\Termark\backend</code>。Windows 便携版位于应用目录下的 <code>data</code>。</li>
-      <li>系统凭据库的服务名为 <code>termark.app</code>。安装版的条目名为 <code>local-data-key</code>，便携版缓存的条目名为 <code>portable-local-data-key</code>。</li>
+      <li data-i18n="path-mac">On macOS, the database is usually at <code>~/Library/Application Support/Termark/backend/termark.db</code>.</li>
+      <li data-i18n="path-win">On Windows, the installed build usually stores it in <code>%AppData%\Termark\backend</code>. The portable build uses the <code>data</code> folder beside the app.</li>
+      <li data-i18n="keychain">The system keychain service is <code>termark.app</code>. The installed build uses <code>local-data-key</code>; the portable build caches <code>portable-local-data-key</code>.</li>
     </ul>
   </details>
 </main>
@@ -998,14 +1000,14 @@ THE SOFTWARE.-->
     for (let [k, v] of Object.entries(opts))
       if (v !== void 0)
         merged[k] = v;
-    const { dkLen, p, m, t, version, onProgress, asyncTick } = merged;
+    const { dkLen, p, m, t: t2, version, onProgress, asyncTick } = merged;
     if (!isU32(dkLen) || dkLen < 4)
       throw new Error('"dkLen" must be 4..');
     if (!isU32(p) || p < 1 || p >= Math.pow(2, 24))
       throw new Error('"p" must be 1..2^24');
     if (!isU32(m))
       throw new Error('"m" must be 0..2^32');
-    if (!isU32(t) || t < 1)
+    if (!isU32(t2) || t2 < 1)
       throw new Error('"t" (iterations) must be 1..2^32');
     if (onProgress !== void 0 && typeof onProgress !== "function")
       throw new Error('"onProgress" must be a function');
@@ -1037,13 +1039,13 @@ THE SOFTWARE.-->
         throw new Error('"salt" must be of length 8..4Gb');
       if (!Object.values(AT).includes(type))
         throw new Error('"type" was invalid');
-      let { p, dkLen, m, t, version, key, personalization, maxmem, onProgress, asyncTick } = argon2Opts(opts);
+      let { p, dkLen, m, t: t2, version, key, personalization, maxmem, onProgress, asyncTick } = argon2Opts(opts);
       const keyInput = key;
       key = rememberOwned(keyInput, abytesOrZero(keyInput, "key"));
       const personalizationInput = personalization;
       personalization = rememberOwned(personalizationInput, abytesOrZero(personalizationInput, "personalization"));
       h = blake2b.create();
-      for (let item of [p, dkLen, m, t, version, type]) {
+      for (let item of [p, dkLen, m, t2, version, type]) {
         BUF[0] = swap8IfBE(item);
         h.update(BUF8);
       }
@@ -1054,7 +1056,7 @@ THE SOFTWARE.-->
       H0 = new Uint32Array(18);
       h.digestInto(u8(H0));
       succeeded = true;
-      return { H0, p, dkLen, m, t, version, maxmem, onProgress, asyncTick };
+      return { H0, p, dkLen, m, t: t2, version, maxmem, onProgress, asyncTick };
     } finally {
       if (h)
         h.destroy();
@@ -1064,7 +1066,7 @@ THE SOFTWARE.-->
     }
   }
   function argon2Init(password, salt, type, opts) {
-    const { H0, p, dkLen, m, t, version, maxmem, onProgress, asyncTick } = argon2InitialHash(password, salt, type, opts);
+    const { H0, p, dkLen, m, t: t2, version, maxmem, onProgress, asyncTick } = argon2InitialHash(password, salt, type, opts);
     try {
       const lanes = p;
       const mP = 4 * p * Math.floor(m / (ARGON2_SYNC_POINTS * p));
@@ -1087,7 +1089,7 @@ THE SOFTWARE.-->
       let perBlock = () => {
       };
       if (onProgress) {
-        const totalBlock = t * ARGON2_SYNC_POINTS * p * segmentLen - 2 * p;
+        const totalBlock = t2 * ARGON2_SYNC_POINTS * p * segmentLen - 2 * p;
         const callbackPer = Math.max(Math.floor(totalBlock / 1e4), 1);
         let blockCnt = 0;
         perBlock = () => {
@@ -1096,7 +1098,7 @@ THE SOFTWARE.-->
             onProgress(blockCnt / totalBlock);
         };
       }
-      return { type, mP, p, t, version, B, laneLen, lanes, segmentLen, dkLen, perBlock, asyncTick };
+      return { type, mP, p, t: t2, version, B, laneLen, lanes, segmentLen, dkLen, perBlock, asyncTick };
     } finally {
       clean(H0);
     }
@@ -1111,11 +1113,11 @@ THE SOFTWARE.-->
     return res;
   }
   function* argon2Blocks(ctx, address) {
-    const { type, mP, p, t, version, B, laneLen, lanes, segmentLen, perBlock } = ctx;
+    const { type, mP, p, t: t2, version, B, laneLen, lanes, segmentLen, perBlock } = ctx;
     address[256 + 6] = mP;
-    address[256 + 8] = t;
+    address[256 + 8] = t2;
     address[256 + 10] = type;
-    for (let r = 0; r < t; r++) {
+    for (let r = 0; r < t2; r++) {
       const needXor = r !== 0 && version === 19;
       address[256 + 0] = r;
       for (let s = 0; s < ARGON2_SYNC_POINTS; s++) {
@@ -1181,11 +1183,181 @@ THE SOFTWARE.-->
   var argon2idAsync = (password, salt, opts = {}) => argon2Async(AT.Argon2id, password, salt, opts);
 
   // work/termark.js
+  var translations = {
+    zh: {
+      title: "Termark \u672C\u5730\u89E3\u5BC6\u5DE5\u5177",
+      intro: "\u5728\u6D4F\u89C8\u5668\u4E2D\u672C\u5730\u89E3\u5BC6 Termark \u6570\u636E\u3002\u6587\u4EF6\u3001\u5BC6\u94A5\u548C\u7ED3\u679C\u4FDD\u7559\u5728\u6B64\u8BBE\u5907\u4E0A\u3002",
+      source: "\u89E3\u5BC6\u6765\u6E90",
+      database: "\u6570\u636E\u5E93",
+      "database-hint": "\u5EFA\u8BAE\u5148\u9000\u51FA Termark\uFF0C\u518D\u9009\u62E9 <code>termark.db</code> \u7684\u526F\u672C\u3002",
+      "find-record": "\u67E5\u627E\u4E3B\u673A\u6216\u51ED\u8BC1",
+      record: "\u8981\u89E3\u5BC6\u7684\u8BB0\u5F55",
+      "encrypted-field": "\u5BC6\u6587\u5B57\u6BB5",
+      "sync-snapshot": "\u540C\u6B65\u5FEB\u7167",
+      "sync-hint": "\u9009\u62E9 Termark \u540C\u6B65\u6587\u4EF6\uFF08.dat \u6216 .json\uFF09\u3002\u540C\u6B65\u5BC6\u7801\u4FDD\u5B58\u5728\u94A5\u5319\u4E32\u65F6\uFF0C\u6761\u76EE\u540D\u4E3A <code>sync-passphrase</code>\u3002",
+      "key-type": "\u5BC6\u94A5\u7C7B\u578B",
+      decrypt: "\u89E3\u5BC6",
+      clear: "\u6E05\u9664\u5BC6\u94A5\u548C\u7ED3\u679C",
+      where: "\u6570\u636E\u5E93\u548C\u5BC6\u94A5\u5728\u54EA\u91CC",
+      "path-mac": "macOS \u6570\u636E\u5E93\u901A\u5E38\u4F4D\u4E8E <code>~/Library/Application Support/Termark/backend/termark.db</code>\u3002",
+      "path-win": "Windows \u5B89\u88C5\u7248\u901A\u5E38\u4F4D\u4E8E <code>%AppData%\\Termark\\backend</code>\u3002Windows \u4FBF\u643A\u7248\u4F4D\u4E8E\u5E94\u7528\u76EE\u5F55\u4E0B\u7684 <code>data</code>\u3002",
+      keychain: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u7684\u670D\u52A1\u540D\u4E3A <code>termark.app</code>\u3002\u5B89\u88C5\u7248\u7684\u6761\u76EE\u540D\u4E3A <code>local-data-key</code>\uFF0C\u4FBF\u643A\u7248\u7F13\u5B58\u7684\u6761\u76EE\u540D\u4E3A <code>portable-local-data-key</code>\u3002",
+      "host-password": "\u4E3B\u673A\u767B\u5F55\u5BC6\u7801",
+      "proxy-password": t("proxy-password"),
+      "private-key": "SSH \u79C1\u94A5",
+      "key-passphrase": "SSH \u79C1\u94A5\u53E3\u4EE4",
+      password: "\u767B\u5F55\u5BC6\u7801",
+      host: "\u4E3B\u673A",
+      credential: "\u51ED\u8BC1",
+      proxy: "\u4EE3\u7406",
+      search: "\u540D\u79F0\u6216 IP \u5730\u5740",
+      "sync-record": "\u540C\u6B65\u8BB0\u5F55",
+      "decrypted-result": "\u89E3\u5BC6\u7ED3\u679C",
+      "full-json": "\u67E5\u770B\u5B8C\u6574\u7684\u89E3\u5BC6 JSON",
+      "full-json-label": t("full-json-label"),
+      "bolt-error": t("bolt-error"),
+      "select-database": t("select-database"),
+      "base64-error": t("base64-error"),
+      "raw-key-error": t("raw-key-error"),
+      "passphrase-error": t("passphrase-error"),
+      "kdf-missing": t("kdf-missing"),
+      "kdf-invalid": t("kdf-invalid"),
+      "cipher-prefix": t("cipher-prefix"),
+      "cipher-short": t("cipher-short"),
+      "decrypt-failed": t("decrypt-failed"),
+      "sync-json": t("sync-json"),
+      "sync-envelope": t("sync-envelope"),
+      "sync-short": t("sync-short"),
+      "sync-failed": t("sync-failed"),
+      "sync-parse": t("sync-parse"),
+      "no-match": t("no-match"),
+      "sync-host": "\u4E3B\u673A",
+      "sync-credential": "\u51ED\u8BC1",
+      "missing-sync-file": "\u8BF7\u5148\u9009\u62E9\u5B8C\u6574\u7684 Termark \u540C\u6B65 .dat \u6587\u4EF6\u3002",
+      "no-fields": "\u8FD9\u6761\u8BB0\u5F55\u6CA1\u6709\u4FDD\u5B58\u53EF\u89E3\u5BC6\u7684\u672C\u5730\u654F\u611F\u5B57\u6BB5\u3002",
+      "choose-record": "\u8BF7\u5148\u9009\u62E9\u6570\u636E\u5E93\u548C\u8BB0\u5F55\u3002",
+      "browser-support": t("browser-support"),
+      "sync-done": "\u540C\u6B65\u5FEB\u7167\u5DF2\u89E3\u5BC6\u3002",
+      "key-check": t("key-check"),
+      "read-db": "\u6B63\u5728\u8BFB\u53D6\u6570\u636E\u5E93\u2026",
+      "loaded": "\u5DF2\u8BFB\u53D6 {count} \u6761\u4E3B\u673A\u3001\u51ED\u8BC1\u548C\u4EE3\u7406\u8BB0\u5F55\u3002",
+      "read-error": "\u65E0\u6CD5\u8BFB\u53D6\u6570\u636E\u5E93\u3002",
+      "decrypting": "\u6B63\u5728\u89E3\u5BC6\u2026",
+      "decrypted": "\u5DF2\u89E3\u5BC6 {count} / {total} \u4E2A\u5B57\u6BB5\u3002",
+      "sync-password": "\u540C\u6B65\u5BC6\u7801",
+      "local-passphrase": "\u672C\u5730\u52A0\u5BC6\u53E3\u4EE4",
+      "local-key": "\u672C\u5730\u6570\u636E\u5BC6\u94A5",
+      "enter-sync-password": "\u8F93\u5165 Termark \u4E91\u540C\u6B65\u8BBE\u7F6E\u91CC\u7684\u540C\u6B65\u5BC6\u7801",
+      "enter-local-passphrase": "\u8F93\u5165\u4F60\u8BBE\u7F6E\u7684\u672C\u5730\u52A0\u5BC6\u53E3\u4EE4",
+      "key-placeholder": "Base64 \u6216 64 \u4F4D\u5341\u516D\u8FDB\u5236",
+      "no-database": "\u8BF7\u5148\u9009\u62E9\u6570\u636E\u5E93",
+      "plaintext": t("plaintext")
+    },
+    en: {
+      title: "Termark Local Decryption Tool",
+      intro: "Decrypt Termark data locally in your browser. Files, keys, and results stay on this device.",
+      source: "Source",
+      database: "Database",
+      "database-hint": "Quit Termark first, then choose a copy of <code>termark.db</code>.",
+      "find-record": "Find a host or credential",
+      record: "Record to decrypt",
+      "encrypted-field": "Encrypted field",
+      "sync-snapshot": "Sync snapshot",
+      "sync-hint": "Choose a Termark sync file (.dat or .json). If saved in Keychain, the sync password entry is named <code>sync-passphrase</code>.",
+      "key-type": "Key type",
+      decrypt: "Decrypt",
+      clear: "Clear key and results",
+      where: "Where to find the database and keys",
+      "path-mac": "On macOS, the database is usually at <code>~/Library/Application Support/Termark/backend/termark.db</code>.",
+      "path-win": "On Windows, the installed build usually stores it in <code>%AppData%\\Termark\\backend</code>. The portable build uses the <code>data</code> folder beside the app.",
+      keychain: "The system keychain service is <code>termark.app</code>. The installed build uses <code>local-data-key</code>; the portable build caches <code>portable-local-data-key</code>.",
+      "host-password": "Host login password",
+      "proxy-password": "Proxy password",
+      "private-key": "SSH private key",
+      "key-passphrase": "SSH key passphrase",
+      password: "Login password",
+      host: "Host",
+      credential: "Credential",
+      proxy: "Proxy",
+      search: "Name or IP address",
+      "sync-record": "Sync record",
+      "decrypted-result": "Decrypted result",
+      "full-json": "View full decrypted JSON",
+      "full-json-label": "Full decrypted JSON",
+      "bolt-error": "Could not read the Bolt database. Quit Termark, make a fresh copy of termark.db, and try again.",
+      "select-database": "Choose Termark\u2019s termark.db. The file should be a local Termark Bolt database.",
+      "base64-error": "Invalid Base64 format.",
+      "raw-key-error": "The local data key must be 32 bytes. Paste the Base64 keychain value or enter 64 hexadecimal characters.",
+      "passphrase-error": "Enter the local encryption passphrase.",
+      "kdf-missing": "The database has no passphrase derivation parameters. You can use the 32-byte local data key instead.",
+      "kdf-invalid": "The passphrase derivation parameters are invalid or exceed this browser tool\u2019s limits.",
+      "cipher-prefix": "Ciphertext must start with enc:v1:.",
+      "cipher-short": "The encrypted field is too short.",
+      "decrypt-failed": "Decryption verification failed. Check that the key matches this database and that the ciphertext is complete.",
+      "sync-json": "Could not read the sync snapshot. Choose a complete Termark .dat file.",
+      "sync-envelope": "This file is missing the Termark sync snapshot version or data field.",
+      "sync-short": "The sync snapshot ciphertext is too short. Choose a complete .dat file.",
+      "sync-failed": "Sync snapshot verification failed. Check the sync password and make sure the .dat file is complete.",
+      "sync-parse": "The sync snapshot passed key verification, but its decrypted content is not valid JSON.",
+      "no-match": "No matching records",
+      "sync-host": "Host",
+      "sync-credential": "Credential",
+      "missing-sync-file": "Choose a complete Termark sync .dat file first.",
+      "no-fields": "This record has no locally encrypted fields to decrypt.",
+      "choose-record": "Choose a database and record first.",
+      "browser-support": "Open the downloaded HTML file directly in Chrome, Edge, or Safari.",
+      "sync-done": "Sync snapshot decrypted.",
+      "key-check": "The database local key check did not match.",
+      "read-db": "Reading database\u2026",
+      "loaded": "Loaded {count} host, credential, and proxy records.",
+      "read-error": "Could not read the database.",
+      "decrypting": "Decrypting\u2026",
+      "decrypted": "Decrypted {count} of {total} fields.",
+      "sync-password": "Sync password",
+      "local-passphrase": "Local encryption passphrase",
+      "local-key": "Local data key",
+      "enter-sync-password": "Enter the sync password from Termark sync settings",
+      "enter-local-passphrase": "Enter your local encryption passphrase",
+      "key-placeholder": "Base64 or 64-character hexadecimal",
+      "no-database": "Choose a database first",
+      plaintext: "Plaintext"
+    }
+  };
+  var language = "en";
+  var t = (key) => translations[language][key];
+  var interpolate = (key, values) => Object.entries(values).reduce((message, [name, value]) => message.replace(`{${name}}`, value), t(key));
+  function setLanguage(next) {
+    language = next;
+    document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+    document.querySelectorAll("[data-i18n]").forEach((element) => element.innerHTML = t(element.dataset.i18n));
+    document.getElementById("language").textContent = language === "zh" ? "English" : "\u4E2D\u6587";
+    document.getElementById("language").setAttribute("aria-label", language === "zh" ? "\u5207\u6362\u8BED\u8A00" : "Switch language");
+    document.getElementById("filter").placeholder = t("search");
+    document.getElementById("ciphertext").placeholder = "enc:v1:\u2026";
+    document.getElementById("mode").options[0].textContent = language === "zh" ? "32 \u5B57\u8282\u672C\u5730\u6570\u636E\u5BC6\u94A5" : "32-byte local data key";
+    const sourceOptions = document.getElementById("source").options;
+    sourceOptions[0].textContent = language === "zh" ? "Termark \u6570\u636E\u5E93" : "Termark database";
+    sourceOptions[1].textContent = language === "zh" ? "\u540C\u6B65\u5FEB\u7167\uFF08.dat\uFF09" : "Sync snapshot (.dat)";
+    sourceOptions[2].textContent = language === "zh" ? "\u5355\u4E2A\u52A0\u5BC6\u5B57\u6BB5" : "Single encrypted field";
+    document.getElementById("mode").options[0].textContent = language === "zh" ? "32 \u5B57\u8282\u672C\u5730\u6570\u636E\u5BC6\u94A5" : "32-byte local data key";
+    document.getElementById("mode").options[1].textContent = language === "zh" ? "\u672C\u5730\u52A0\u5BC6\u53E3\u4EE4\uFF08\u4ECE\u6570\u636E\u5E93\u8BFB\u53D6\u6D3E\u751F\u53C2\u6570\uFF09" : "Local encryption passphrase (derive parameters from database)";
+    const secretLabel = document.getElementById("secret-label");
+    if (secretLabel.dataset.key) secretLabel.textContent = t(secretLabel.dataset.key);
+    if (secret.dataset.placeholderKey) secret.placeholder = t(secret.dataset.placeholderKey);
+    document.querySelectorAll("#results .result[data-label-key] > span:first-child").forEach((element) => {
+      element.textContent = t(element.parentElement.dataset.labelKey);
+    });
+    const fullJsonSummary = document.querySelector("#results details summary");
+    if (fullJsonSummary) fullJsonSummary.textContent = t("full-json");
+    updateChoices();
+    updateMode(false);
+    if (database) status.textContent = interpolate("loaded", { count: database.entries.length });
+  }
   var utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
   var encode = new TextEncoder();
   var prefix = "enc:v1:";
   var checkText = "termark-local-data-key-check-v1";
-  function requireFormat(condition, message = "\u65E0\u6CD5\u8BFB\u53D6 Bolt \u6570\u636E\u5E93\u7ED3\u6784\u3002\u8BF7\u5728 Termark \u9000\u51FA\u540E\uFF0C\u91CD\u65B0\u590D\u5236 termark.db \u518D\u8BD5\u3002") {
+  function requireFormat(condition, message = t("bolt-error")) {
     if (!condition) throw new Error(message);
   }
   function readBolt(buffer) {
@@ -1210,7 +1382,7 @@ THE SOFTWARE.-->
       const other = meta(offset);
       if (other && (!active || other.pageSize === active.pageSize && other.tx > active.tx)) active = other;
     }
-    requireFormat(active, "\u8BF7\u9009\u62E9 Termark \u7684 termark.db\u3002\u6587\u4EF6\u5E94\u4E3A Termark \u672C\u5730 Bolt \u6570\u636E\u5E93\u3002");
+    requireFormat(active, t("select-database"));
     function page(id) {
       requireFormat(id >= 2n && id < active.limit);
       const offset = Number(id) * active.pageSize;
@@ -1264,21 +1436,21 @@ THE SOFTWARE.-->
   function decodeBase64(input) {
     const value = input.replace(/\s/g, "").replace(/-/g, "+").replace(/_/g, "/");
     const unpadded = value.replace(/=+$/, "");
-    requireFormat(/^[A-Za-z0-9+/]*={0,2}$/.test(value) && unpadded.length % 4 !== 1 && (!value.includes("=") || value.length % 4 === 0), "Base64 \u683C\u5F0F\u65E0\u6548\u3002");
+    requireFormat(/^[A-Za-z0-9+/]*={0,2}$/.test(value) && unpadded.length % 4 !== 1 && (!value.includes("=") || value.length % 4 === 0), t("base64-error"));
     return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
   }
   function parseRawKey(input) {
     const value = input.trim();
     const hex = value.replace(/^0x/i, "");
     const key = /^[0-9a-f]{64}$/i.test(hex) ? Uint8Array.from(hex.match(/../g), (pair) => parseInt(pair, 16)) : decodeBase64(value);
-    requireFormat(key.length === 32, "\u672C\u5730\u6570\u636E\u5BC6\u94A5\u5FC5\u987B\u4E3A 32 \u5B57\u8282\u3002\u8BF7\u7C98\u8D34\u94A5\u5319\u4E32\u6761\u76EE\u7684 Base64 \u503C\uFF0C\u6216\u8F93\u5165 64 \u4F4D\u5341\u516D\u8FDB\u5236\u3002");
+    requireFormat(key.length === 32, t("raw-key-error"));
     return key;
   }
   async function deriveKey(passphrase, kdf) {
-    requireFormat(passphrase.length, "\u8BF7\u8F93\u5165\u672C\u5730\u52A0\u5BC6\u53E3\u4EE4\u3002");
-    requireFormat(kdf, "\u6570\u636E\u5E93\u91CC\u6CA1\u6709\u53E3\u4EE4\u6D3E\u751F\u53C2\u6570\u3002\u53EF\u6539\u7528 32 \u5B57\u8282\u672C\u5730\u6570\u636E\u5BC6\u94A5\u3002");
+    requireFormat(passphrase.length, t("passphrase-error"));
+    requireFormat(kdf, t("kdf-missing"));
     const { version, kdf: algorithm, salt, time, memory, threads } = kdf;
-    requireFormat(version === 1 && algorithm === "argon2id" && typeof salt === "string" && Number.isInteger(time) && time >= 1 && time <= 32 && Number.isInteger(threads) && threads >= 1 && threads <= 32 && Number.isInteger(memory) && memory >= 8 * threads && memory <= 512 * 1024 && memory * time <= 4 * 1024 * 1024, "\u53E3\u4EE4\u6D3E\u751F\u53C2\u6570\u65E0\u6548\uFF0C\u6216\u8D85\u51FA\u4E86\u6D4F\u89C8\u5668\u5DE5\u5177\u7684\u5904\u7406\u4E0A\u9650\u3002");
+    requireFormat(version === 1 && algorithm === "argon2id" && typeof salt === "string" && Number.isInteger(time) && time >= 1 && time <= 32 && Number.isInteger(threads) && threads >= 1 && threads <= 32 && Number.isInteger(memory) && memory >= 8 * threads && memory <= 512 * 1024 && memory * time <= 4 * 1024 * 1024, t("kdf-invalid"));
     return argon2idAsync(encode.encode(passphrase), decodeBase64(salt), {
       t: time,
       m: memory,
@@ -1289,9 +1461,9 @@ THE SOFTWARE.-->
     });
   }
   async function decryptField(key, value) {
-    requireFormat(value.startsWith(prefix), "\u5BC6\u6587\u5E94\u4EE5 enc:v1: \u5F00\u5934\u3002");
+    requireFormat(value.startsWith(prefix), t("cipher-prefix"));
     const payload = decodeBase64(value.slice(prefix.length));
-    requireFormat(payload.length >= 28, "\u5BC6\u6587\u5B57\u6BB5\u957F\u5EA6\u4E0D\u8DB3\u3002");
+    requireFormat(payload.length >= 28, t("cipher-short"));
     let result;
     try {
       result = await crypto.subtle.decrypt(
@@ -1300,25 +1472,25 @@ THE SOFTWARE.-->
         payload.subarray(12)
       );
     } catch {
-      throw new Error("\u89E3\u5BC6\u6821\u9A8C\u5931\u8D25\u3002\u8BF7\u6838\u5BF9\u5BC6\u94A5\u548C\u6570\u636E\u5E93\u662F\u5426\u914D\u5957\uFF0C\u6216\u68C0\u67E5\u5BC6\u6587\u662F\u5426\u5B8C\u6574\u3002");
+      throw new Error(t("decrypt-failed"));
     }
     return utf8.decode(result);
   }
   var hostFields = {
-    password: "\u4E3B\u673A\u767B\u5F55\u5BC6\u7801",
-    sshPassword: "\u4E3B\u673A\u767B\u5F55\u5BC6\u7801",
-    proxyPassword: "\u4EE3\u7406\u5BC6\u7801",
-    privateKey: "SSH \u79C1\u94A5",
-    passphrase: "SSH \u79C1\u94A5\u53E3\u4EE4",
-    sshPassphrase: "SSH \u79C1\u94A5\u53E3\u4EE4",
-    keyPassphrase: "SSH \u79C1\u94A5\u53E3\u4EE4",
-    privateKeyPassphrase: "SSH \u79C1\u94A5\u53E3\u4EE4"
+    password: "host-password",
+    sshPassword: "host-password",
+    proxyPassword: "proxy-password",
+    privateKey: "private-key",
+    passphrase: "key-passphrase",
+    sshPassphrase: "key-passphrase",
+    keyPassphrase: "key-passphrase",
+    privateKeyPassphrase: "key-passphrase"
   };
-  var credentialFields = { password: "\u767B\u5F55\u5BC6\u7801", privateKey: "SSH \u79C1\u94A5", passphrase: "SSH \u79C1\u94A5\u53E3\u4EE4", keyPassphrase: "SSH \u79C1\u94A5\u53E3\u4EE4" };
+  var credentialFields = { password: "password", privateKey: "private-key", passphrase: "key-passphrase", keyPassphrase: "key-passphrase" };
   function fields(record, names) {
     return Object.entries(names).flatMap(([key, label]) => {
       const value = record[key];
-      return typeof value === "string" && value.startsWith("enc:") ? [{ label, value }] : [];
+      return typeof value === "string" && value.startsWith("enc:") ? [{ label: t(label), labelKey: label, value }] : [];
     });
   }
   function readDatabase(buffer) {
@@ -1330,16 +1502,16 @@ THE SOFTWARE.-->
       const bound = credentials.get(host.credentialId);
       const address = host.address || "";
       const label = [host.name || address || id, address && address !== host.name ? address : ""].filter(Boolean).join(" \xB7 ");
-      return { label: "\u4E3B\u673A \xB7 " + label, fields: [
+      return { kind: "host", name: label, fields: [
         ...fields(host, hostFields),
         ...bound?.fields.map((field) => ({ ...field, label: bound.label + " \xB7 " + field.label })) || []
       ] };
     });
     for (const credential of credentials.values()) {
-      entries.push({ label: "\u51ED\u8BC1 \xB7 " + credential.label, fields: credential.fields });
+      entries.push({ kind: "credential", name: credential.label, fields: credential.fields });
     }
     for (const [id, proxy] of records("network_proxies")) {
-      entries.push({ label: "\u4EE3\u7406 \xB7 " + (proxy.name || id), fields: fields(proxy, { password: "\u4EE3\u7406\u5BC6\u7801" }) });
+      entries.push({ kind: "proxy", name: proxy.name || id, fields: fields(proxy, { password: "proxy-password" }) });
     }
     const kdf = settings.get("local_data_key_kdf");
     return { entries, check: settings.get("local_data_key_check"), kdf: kdf ? JSON.parse(kdf) : null };
@@ -1349,14 +1521,14 @@ THE SOFTWARE.-->
     try {
       envelope = JSON.parse(await file2.text());
     } catch {
-      throw new Error("\u65E0\u6CD5\u8BFB\u53D6\u540C\u6B65\u5FEB\u7167\u3002\u8BF7\u9009\u62E9\u5B8C\u6574\u7684 Termark .dat \u6587\u4EF6\u3002");
+      throw new Error(t("sync-json"));
     }
     requireFormat(
       envelope && Number.isSafeInteger(envelope.version) && typeof envelope.data === "string",
-      "\u8FD9\u4E2A\u6587\u4EF6\u7F3A\u5C11 Termark \u540C\u6B65\u5FEB\u7167\u7684 version \u6216 data\u3002"
+      t("sync-envelope")
     );
     const payload = decodeBase64(envelope.data);
-    requireFormat(payload.length >= 44, "\u540C\u6B65\u5FEB\u7167\u5BC6\u6587\u957F\u5EA6\u4E0D\u8DB3\u3002\u8BF7\u9009\u62E9\u5B8C\u6574\u7684 .dat \u6587\u4EF6\u3002");
+    requireFormat(payload.length >= 44, t("sync-short"));
     const passwordBytes = encode.encode(passphrase);
     let baseKey;
     try {
@@ -1378,12 +1550,12 @@ THE SOFTWARE.-->
         tagLength: 128
       }, key, payload.subarray(28));
     } catch {
-      throw new Error("\u540C\u6B65\u5FEB\u7167\u89E3\u5BC6\u6821\u9A8C\u5931\u8D25\u3002\u8BF7\u6838\u5BF9\u540C\u6B65\u5BC6\u7801\u4EE5\u53CA .dat \u6587\u4EF6\u662F\u5426\u5B8C\u6574\u3002");
+      throw new Error(t("sync-failed"));
     }
     try {
       return JSON.parse(utf8.decode(plaintext));
     } catch {
-      throw new Error("\u540C\u6B65\u5FEB\u7167\u901A\u8FC7\u4E86\u5BC6\u94A5\u6821\u9A8C\uFF0C\u4F46\u89E3\u5BC6\u5185\u5BB9\u65E0\u6CD5\u89E3\u6790\u4E3A JSON\u3002");
+      throw new Error(t("sync-parse"));
     } finally {
       new Uint8Array(plaintext).fill(0);
     }
@@ -1415,7 +1587,7 @@ THE SOFTWARE.-->
     ).map((key) => [key, record[key]]));
     const choices = [
       ...hosts.map((host) => ({
-        label: ["\u4E3B\u673A", host.name, host.address || host.host, host.username].filter(Boolean).join(" \xB7 "),
+        label: [t("sync-host"), host.name, host.address || host.host, host.username].filter(Boolean).join(" \xB7 "),
         value: {
           ...selectFields(host, hostFields2),
           ...host.credentialId ? { credential: selectFields(
@@ -1425,14 +1597,17 @@ THE SOFTWARE.-->
         }
       })),
       ...credentials.map((credential) => ({
-        label: ["\u51ED\u8BC1", credential.name, credential.username].filter(Boolean).join(" \xB7 "),
+        label: [t("sync-credential"), credential.name, credential.username].filter(Boolean).join(" \xB7 "),
         value: selectFields(credential, credentialFields2)
       }))
     ];
-    function labeled(text, element) {
+    function labeled(key, element) {
       const label = document.createElement("label");
       label.className = "result";
-      label.textContent = text;
+      label.dataset.labelKey = key;
+      const heading = document.createElement("span");
+      heading.textContent = t(key);
+      label.append(heading);
       label.append(element);
       return label;
     }
@@ -1445,12 +1620,12 @@ THE SOFTWARE.-->
         for (const [index, item] of choices.entries()) {
           if (item.label.toLowerCase().includes(query)) choice.add(new Option(item.label, index));
         }
-        if (!choice.options.length) choice.add(new Option("\u6CA1\u6709\u5339\u914D\u7684\u8BB0\u5F55", ""));
+        if (!choice.options.length) choice.add(new Option(t("no-match"), ""));
         showChoice();
       };
       const search = document.createElement("input");
       search.type = "search";
-      search.placeholder = "\u540D\u79F0\u6216 IP \u5730\u5740";
+      search.placeholder = t("search");
       const choice = document.createElement("select");
       const output2 = document.createElement("textarea");
       output2.readOnly = true;
@@ -1458,17 +1633,17 @@ THE SOFTWARE.-->
       output2.rows = 8;
       search.addEventListener("input", filterChoices);
       choice.addEventListener("change", showChoice);
-      results.append(labeled("\u67E5\u627E\u4E3B\u673A\u6216\u51ED\u8BC1", search), labeled("\u540C\u6B65\u8BB0\u5F55", choice), labeled("\u89E3\u5BC6\u7ED3\u679C", output2));
+      results.append(labeled("find-record", search), labeled("sync-record", choice), labeled("decrypted-result", output2));
       filterChoices();
     }
     const details = document.createElement("details");
     const summary = document.createElement("summary");
-    summary.textContent = "\u67E5\u770B\u5B8C\u6574\u7684\u89E3\u5BC6 JSON";
+    summary.textContent = t("full-json");
     const output = document.createElement("textarea");
     output.readOnly = true;
     output.spellcheck = false;
     output.rows = 12;
-    output.setAttribute("aria-label", "\u5B8C\u6574\u7684\u89E3\u5BC6 JSON");
+    output.setAttribute("aria-label", t("full-json-label"));
     details.addEventListener("toggle", () => {
       output.value = details.open ? JSON.stringify(snapshot, null, 2) : "";
     });
@@ -1497,10 +1672,15 @@ THE SOFTWARE.-->
     const previous = target.value;
     target.replaceChildren();
     for (const [index, item] of (database?.entries || []).entries()) {
-      if (item.label.toLowerCase().includes(query)) target.add(new Option(item.label, index));
+      if ((t(item.kind) + " " + item.name).toLowerCase().includes(query)) target.add(new Option("", index));
     }
     if ([...target.options].some((option) => option.value === previous)) target.value = previous;
-    if (!target.options.length) target.add(new Option(database ? "\u6CA1\u6709\u5339\u914D\u7684\u8BB0\u5F55" : "\u8BF7\u5148\u9009\u62E9\u6570\u636E\u5E93", ""));
+    if (!target.options.length) target.add(new Option(database ? t("no-match") : t("no-database"), ""));
+    for (const option of target.options) {
+      if (option.value === "") continue;
+      const entry = database.entries[Number(option.value)];
+      option.textContent = t(entry.kind) + " \xB7 " + entry.name;
+    }
   }
   file.addEventListener("change", async () => {
     const sequence = ++fileSequence;
@@ -1510,15 +1690,15 @@ THE SOFTWARE.-->
     updateChoices();
     const selected = file.files[0];
     if (!selected) return;
-    status.textContent = "\u6B63\u5728\u8BFB\u53D6\u6570\u636E\u5E93\u2026";
+    status.textContent = t("read-db");
     try {
       const parsed = readDatabase(await selected.arrayBuffer());
       if (sequence !== fileSequence) return;
       database = parsed;
       updateChoices();
-      status.textContent = "\u5DF2\u8BFB\u53D6 " + database.entries.length + " \u6761\u4E3B\u673A\u3001\u51ED\u8BC1\u548C\u4EE3\u7406\u8BB0\u5F55\u3002";
+      status.textContent = interpolate("loaded", { count: database.entries.length });
     } catch (error) {
-      if (sequence === fileSequence) status.textContent = "\u65E0\u6CD5\u8BFB\u53D6\u6570\u636E\u5E93\u3002" + error.message;
+      if (sequence === fileSequence) status.textContent = t("read-error") + error.message;
     }
   });
   filter.addEventListener("input", () => {
@@ -1535,16 +1715,21 @@ THE SOFTWARE.-->
     if (source === "field") mode.value = "raw";
     updateMode();
   }
-  function updateMode() {
+  function updateMode(clear = true) {
     const source = get("source").value;
     mode.disabled = source !== "database";
-    secret.value = "";
+    if (clear) secret.value = "";
     const passphrase = mode.value === "passphrase";
-    get("secret-label").textContent = source === "sync" ? "\u540C\u6B65\u5BC6\u7801" : passphrase ? "\u672C\u5730\u52A0\u5BC6\u53E3\u4EE4" : "\u672C\u5730\u6570\u636E\u5BC6\u94A5";
-    secret.placeholder = source === "sync" ? "\u8F93\u5165 Termark \u4E91\u540C\u6B65\u8BBE\u7F6E\u91CC\u7684\u540C\u6B65\u5BC6\u7801" : passphrase ? "\u8F93\u5165\u4F60\u8BBE\u7F6E\u7684\u672C\u5730\u52A0\u5BC6\u53E3\u4EE4" : "Base64 \u6216 64 \u4F4D\u5341\u516D\u8FDB\u5236";
-    clearResults();
+    const secretKey = source === "sync" ? "sync-password" : passphrase ? "local-passphrase" : "local-key";
+    get("secret-label").dataset.key = secretKey;
+    get("secret-label").textContent = t(secretKey);
+    const placeholderKey = source === "sync" ? "enter-sync-password" : passphrase ? "enter-local-passphrase" : "key-placeholder";
+    secret.dataset.placeholderKey = placeholderKey;
+    secret.placeholder = t(placeholderKey);
+    if (clear) clearResults();
   }
   get("source").addEventListener("change", updateSource);
+  get("language").addEventListener("click", () => setLanguage(language === "zh" ? "en" : "zh"));
   mode.addEventListener("change", updateMode);
   get("sync-file").addEventListener("change", clearResults);
   get("clear").addEventListener("click", () => {
@@ -1560,41 +1745,44 @@ THE SOFTWARE.-->
     const manual = source === "field";
     const syncFile = source === "sync" ? get("sync-file").files[0] : null;
     if (source === "sync" && !syncFile) {
-      status.textContent = "\u8BF7\u5148\u9009\u62E9\u5B8C\u6574\u7684 Termark \u540C\u6B65 .dat \u6587\u4EF6\u3002";
+      status.textContent = t("missing-sync-file");
       return;
     }
     const current = source === "database" ? database : null;
     const selected = current && target.value !== "" ? current.entries[Number(target.value)] : null;
-    const encrypted = manual ? [{ label: "\u660E\u6587", value: get("ciphertext").value.trim() }] : selected?.fields;
+    const encrypted = manual ? [{ label: t("plaintext"), value: get("ciphertext").value.trim() }] : selected?.fields;
     if (!syncFile && !encrypted?.length) {
-      status.textContent = selected ? "\u8FD9\u6761\u8BB0\u5F55\u6CA1\u6709\u4FDD\u5B58\u53EF\u89E3\u5BC6\u7684\u672C\u5730\u654F\u611F\u5B57\u6BB5\u3002" : "\u8BF7\u5148\u9009\u62E9\u6570\u636E\u5E93\u548C\u8BB0\u5F55\u3002";
+      status.textContent = selected ? t("no-fields") : t("choose-record");
       return;
     }
     if (!globalThis.crypto?.subtle) {
-      status.textContent = "\u8BF7\u7528 Chrome\u3001Edge \u6216 Safari \u76F4\u63A5\u6253\u5F00\u4E0B\u8F7D\u7684 HTML \u6587\u4EF6\u3002";
+      status.textContent = t("browser-support");
       return;
     }
     busy = true;
     controls.disabled = true;
-    status.textContent = "\u6B63\u5728\u89E3\u5BC6\u2026";
+    status.textContent = t("decrypting");
     let raw;
     try {
       if (syncFile) {
         showSnapshot(await decryptSnapshot(syncFile, secret.value));
-        status.textContent = "\u540C\u6B65\u5FEB\u7167\u5DF2\u89E3\u5BC6\u3002";
+        status.textContent = t("sync-done");
         return;
       }
       raw = mode.value === "passphrase" ? await deriveKey(secret.value, current.kdf) : parseRawKey(secret.value);
       const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["decrypt"]);
       raw.fill(0);
       if (current?.check) {
-        requireFormat(await decryptField(key, current.check) === checkText, "\u6570\u636E\u5E93\u7684\u672C\u5730\u5BC6\u94A5\u6821\u9A8C\u503C\u4E0D\u5339\u914D\u3002");
+        requireFormat(await decryptField(key, current.check) === checkText, t("key-check"));
       }
       let count = 0;
       for (const field of encrypted) {
         const label = document.createElement("label");
         label.className = "result";
-        label.textContent = field.label;
+        label.dataset.labelKey = field.labelKey || "plaintext";
+        const heading = document.createElement("span");
+        heading.textContent = t(label.dataset.labelKey);
+        label.append(heading);
         try {
           const plaintext = await decryptField(key, field.value);
           const output = document.createElement("textarea");
@@ -1612,7 +1800,7 @@ THE SOFTWARE.-->
         }
         results.append(label);
       }
-      status.textContent = "\u5DF2\u89E3\u5BC6 " + count + " / " + encrypted.length + " \u4E2A\u5B57\u6BB5\u3002";
+      status.textContent = interpolate("decrypted", { count, total: encrypted.length });
     } catch (error) {
       status.textContent = error.message;
     } finally {
@@ -1622,6 +1810,7 @@ THE SOFTWARE.-->
     }
   });
   updateSource();
+  setLanguage("en");
 })();
 </script>
 </body>

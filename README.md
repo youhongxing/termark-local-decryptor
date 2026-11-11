@@ -1,4 +1,4 @@
-# Termark 本地解密工具
+# Termark Local Decryption Tool | Termark 本地解密工具
 
 在浏览器中解密 Termark 本地数据库或云同步 `.dat` 快照，查看主机、凭证及相关敏感字段。
 
@@ -29,3 +29,36 @@ macOS 本地数据库默认位于 `~/Library/Application Support/Termark/backend
 ## 隐私
 
 工具使用浏览器本地文件读取和 Web Crypto 解密。数据库、快照、密码和解密结果不会上传到此网站。请仅在可信设备上输入密钥。GitHub Pages 和这个公开仓库对所有人可见。
+
+
+## English
+
+Decrypt Termark local databases and cloud sync `.dat` snapshots in your browser.
+
+**Open the tool:** <https://youhongxing.github.io/termark-local-decryptor/>
+
+### Usage
+
+1. Open the page and select a source.
+2. Choose a `termark.db` file or a complete sync `.dat` snapshot.
+3. Enter the matching local data key, local encryption passphrase, or sync password, then select **Decrypt**.
+4. Search for a host by name or IP address. For sync snapshots, you can also view the full decrypted JSON.
+
+### Supported sources
+
+- **Local database:** Termark `enc:v1:` fields. Enter the 32-byte local data key, or derive it from the local encryption passphrase and KDF parameters stored in the database.
+- **Sync snapshot:** Termark `.dat` / `.json` snapshots with `version` and `data` fields. Enter the Termark cloud sync password.
+- **Single field:** Paste an `enc:v1:` ciphertext and enter the local data key.
+
+Default database locations are `~/Library/Application Support/Termark/backend/termark.db` on macOS, `%AppData%\Termark\backend` on installed Windows builds, and the `data` folder next to the application on Windows portable builds.
+
+### Implementation references
+
+This tool follows Termark’s official encryption documentation and handles local data and cloud sync formats separately:
+
+- [Local Encryption and Data Recovery](https://www.termark.app/docs/local-encryption) covers local data keys, encrypted fields, and portable-build passphrase derivation.
+- [Cloud Sync](https://www.termark.app/docs/cloud-sync) covers sync-password key derivation and snapshot encryption.
+
+### Privacy
+
+The tool reads files and decrypts data in your browser. It does not upload database files, snapshots, passwords, or decrypted results to this website. Enter keys only on a device you trust. This repository and its GitHub Pages site are public.
