@@ -19,6 +19,13 @@
 
 macOS 本地数据库默认位于 `~/Library/Application Support/Termark/backend/termark.db`。Windows 安装版默认位于 `%AppData%\Termark\backend`，Windows 便携版数据位于程序目录的 `data` 文件夹。
 
+## 实现依据
+
+本工具依据 Termark 官方加密说明实现，并按本地数据和云同步两种格式分别处理：
+
+- [本地加密与数据恢复说明](https://www.termark.app/zh/docs/local-encryption)：本地数据密钥、本地敏感字段加密和便携版口令派生。
+- [云同步说明](https://www.termark.app/zh/docs/cloud-sync)：同步密码派生密钥及同步快照加密。
+
 ## 隐私
 
 工具使用浏览器本地文件读取和 Web Crypto 解密。数据库、快照、密码和解密结果不会上传到此网站。请仅在可信设备上输入密钥。GitHub Pages 和这个公开仓库对所有人可见。
