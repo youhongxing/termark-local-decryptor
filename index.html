@@ -1,0 +1,1628 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Termark 本地解密工具</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f1f4f3; --panel: #fff; --ink: #172722; --sub: #51645d; --border: #b8c8c0; --accent: #136047; --button-text: #fff; --error: #9e271f; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #14201d; --panel: #1a2a24; --ink: #e7f0eb; --sub: #aec2b9; --border: #637a6f; --accent: #95e1be; --button-text: #13271e; --error: #ffb4a9; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 Inter, system-ui, "PingFang SC", sans-serif; }
+  main { max-width: 700px; margin: 0 auto; padding: clamp(22px, 6vw, 60px) 18px; }
+  h1 { font-size: clamp(25px, 6vw, 36px); margin: 0; line-height: 1.2; letter-spacing: -.02em; }
+  header p { color: var(--sub); margin: 12px 0 25px; }
+  form { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: clamp(16px, 5vw, 30px); }
+  fieldset { padding: 0; margin: 0; border: 0; min-width: 0; }
+  label { display: block; margin: 0 0 15px; font-weight: 600; }
+  select, input, textarea { display: block; margin-top: 5px; width: 100%; min-height: 42px; background: var(--panel); color: var(--ink); border: 1px solid var(--border); border-radius: 8px; padding: 8px 11px; font: inherit; font-weight: 400; }
+  input[type=file] { padding: 6px; }
+  textarea { resize: vertical; }
+  textarea[readonly] { font-family: ui-monospace, monospace; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hint { display: block; color: var(--sub); font-weight: 400; font-size: .84rem; margin-top: 6px; overflow-wrap: anywhere; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  button { background: var(--accent); color: var(--button-text); font: inherit; font-weight: 650; border: 1px solid var(--accent); border-radius: 8px; padding: 8px 16px; cursor: pointer; }
+  button.secondary { background: transparent; border-color: var(--border); color: var(--ink); }
+  fieldset:disabled button { opacity: .55; cursor: wait; }
+  #status { margin: 0; }
+  #status:not(:empty) { margin-top: 16px; }
+  .result { margin: 16px 0 0; }
+  .error { display: block; color: var(--error); font-weight: 400; }
+  details { margin-top: 19px; color: var(--sub); font-size: .86rem; }
+  summary { cursor: pointer; }
+  code { overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Termark 本地解密工具</h1>
+    <p>数据库、密钥和解密结果仅在当前浏览器页面处理。</p>
+  </header>
+  <form id="form" autocomplete="off">
+    <fieldset id="controls">
+      <label>解密来源
+        <select id="source"><option value="database">Termark 数据库</option><option value="sync">同步快照（.dat）</option><option value="field">单个加密字段</option></select>
+      </label>
+      <div id="database-inputs">
+        <label>数据库
+          <input id="database" type="file" accept=".db,.bolt,.bbolt">
+          <span class="hint">建议先退出 Termark，再选择 <code>termark.db</code> 的副本。</span>
+        </label>
+        <label>查找主机或凭证 <input id="filter" type="search" placeholder="名称或 IP 地址"></label>
+        <label>要解密的记录 <select id="target"><option value="">请先选择数据库</option></select></label>
+      </div>
+      <div id="field-inputs" hidden>
+        <label>密文字段 <textarea id="ciphertext" rows="3" placeholder="enc:v1:…" spellcheck="false"></textarea></label>
+      </div>
+      <div id="sync-inputs" hidden>
+        <label>同步快照
+          <input id="sync-file" type="file">
+          <span class="hint">选择 Termark 同步文件（.dat 或 .json）。同步密码保存在钥匙串时，条目名为 <code>sync-passphrase</code>。</span>
+        </label>
+      </div>
+      <label id="key-type">密钥类型
+        <select id="mode">
+          <option value="raw">32 字节本地数据密钥</option>
+          <option value="passphrase">本地加密口令（从数据库读取派生参数）</option>
+        </select>
+      </label>
+      <label><span id="secret-label">本地数据密钥</span>
+        <input id="secret" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" required>
+      </label>
+      <div class="actions">
+        <button type="submit">解密</button>
+        <button class="secondary" id="clear" type="button">清除密钥和结果</button>
+      </div>
+    </fieldset>
+    <p id="status" role="status"></p>
+    <div id="results"></div>
+  </form>
+  <details>
+    <summary>数据库和密钥在哪里</summary>
+    <ul>
+      <li>macOS 数据库通常位于 <code>~/Library/Application Support/Termark/backend/termark.db</code>。</li>
+      <li>Windows 安装版通常位于 <code>%AppData%\Termark\backend</code>。Windows 便携版位于应用目录下的 <code>data</code>。</li>
+      <li>系统凭据库的服务名为 <code>termark.app</code>。安装版的条目名为 <code>local-data-key</code>，便携版缓存的条目名为 <code>portable-local-data-key</code>。</li>
+    </ul>
+  </details>
+</main>
+<!-- @noble/hashes 2.4.0
+The MIT License (MIT)
+
+Copyright (c) 2022 Paul Miller (https://paulmillr.com)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the “Software”), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.-->
+<script>(() => {
+  // work/node_modules/@noble/hashes/utils.js
+  function isBytes(a) {
+    return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
+  }
+  var atitle = (title) => title ? `"${title}" ` : "";
+  function anumber(n, title = "") {
+    if (typeof n !== "number")
+      throw new TypeError(atitle(title) + "expected number, got " + typeof n);
+    if (!Number.isSafeInteger(n) || n < 0)
+      throw new RangeError(atitle(title) + "expected integer >= 0, got " + n);
+    return n;
+  }
+  function abytes(value, length, title = "") {
+    if (isBytes(value) && (length === void 0 || value.length === length))
+      return value;
+    if (length !== void 0)
+      anumber(length, "length");
+    const bytes = isBytes(value);
+    const ofLen = length !== void 0 ? ` of length ${length}` : "";
+    const got = bytes ? `length=${value.length}` : `type=${typeof value}`;
+    const message = atitle(title) + "expected Uint8Array" + ofLen + ", got " + got;
+    if (!bytes)
+      throw new TypeError(message);
+    throw new RangeError(message);
+  }
+  function copyBytes(bytes) {
+    return Uint8Array.from(abytes(bytes));
+  }
+  var aobject = (value, label) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value))
+      throw new TypeError((label === "object" ? "" : `"${label}" `) + "expected object, got type=" + typeof value);
+  };
+  var aopts = (value, label) => {
+    aobject(value, label);
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null)
+      throw new TypeError(`"${label}" expected plain object`);
+    if (Object.hasOwn(value, "__proto__"))
+      throw new TypeError(`"${label}.__proto__" is not allowed`);
+  };
+  function aexists(instance, checkFinished = true) {
+    if (instance.destroyed)
+      throw new Error("hash was destroyed");
+    if (checkFinished && instance.finished)
+      throw new Error("digest() was already called");
+  }
+  function aoutput(out, instance) {
+    abytes(out, void 0, "output");
+    const min = instance.outputLen;
+    if (!(out.length >= min)) {
+      throw new RangeError('"output" expected length >= ' + min);
+    }
+  }
+  function u8(arr) {
+    return new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
+  }
+  function u32(arr) {
+    return new Uint32Array(arr.buffer, arr.byteOffset, Math.floor(arr.byteLength / 4));
+  }
+  function clean(...arrays) {
+    for (let i = 0; i < arrays.length; i++) {
+      arrays[i].fill(0);
+    }
+  }
+  var isLE = /* @__PURE__ */ (() => new Uint8Array(new Uint32Array([287454020]).buffer)[0] === 68)();
+  function byteSwap(word) {
+    return word << 24 & 4278190080 | word << 8 & 16711680 | word >>> 8 & 65280 | word >>> 24 & 255;
+  }
+  var swap8IfBE = isLE ? (n) => n : (n) => byteSwap(n) >>> 0;
+  function byteSwap32(arr) {
+    for (let i = 0; i < arr.length; i++) {
+      arr[i] = byteSwap(arr[i]);
+    }
+    return arr;
+  }
+  var swap32IfBE = isLE ? (u) => u : byteSwap32;
+  function nextTick(onReject) {
+    const host = globalThis;
+    if (typeof host.scheduler?.yield === "function") {
+      const promise = host.scheduler.yield();
+      if (onReject)
+        promise.catch(onReject);
+      return promise;
+    }
+    return new Promise((resolve) => host.setTimeout(resolve, 0));
+  }
+  function utf8ToBytes(str) {
+    if (typeof str !== "string")
+      throw new TypeError("string expected");
+    const encoded = new TextEncoder().encode(str);
+    try {
+      return new Uint8Array(encoded);
+    } finally {
+      clean(encoded);
+    }
+  }
+  function kdfInputToBytes(data, errorTitle = "") {
+    if (typeof data === "string")
+      return utf8ToBytes(data);
+    return abytes(data, void 0, errorTitle);
+  }
+  function checkOpts(defaults, opts, title = "opts") {
+    aopts(defaults, "defaults");
+    if (opts !== void 0)
+      aopts(opts, title);
+    const merged = Object.assign(/* @__PURE__ */ Object.create(null), defaults, opts);
+    return merged;
+  }
+  function createHasher(hashCons, info = {}) {
+    if (typeof hashCons !== "function")
+      throw new TypeError('"hashCons" expected function, got type=' + typeof hashCons);
+    info = checkOpts({}, info, "info");
+    const hashC = (msg, opts) => hashCons(opts).update(msg).digest();
+    const tmp = hashCons(void 0);
+    hashC.outputLen = tmp.outputLen;
+    hashC.blockLen = tmp.blockLen;
+    hashC.canXOF = tmp.canXOF;
+    hashC.create = (opts) => hashCons(opts);
+    Object.assign(hashC, info);
+    return Object.freeze(hashC);
+  }
+
+  // work/node_modules/@noble/hashes/_blake.js
+  var BSIGMA = /* @__PURE__ */ Uint8Array.from([
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    14,
+    10,
+    4,
+    8,
+    9,
+    15,
+    13,
+    6,
+    1,
+    12,
+    0,
+    2,
+    11,
+    7,
+    5,
+    3,
+    11,
+    8,
+    12,
+    0,
+    5,
+    2,
+    15,
+    13,
+    10,
+    14,
+    3,
+    6,
+    7,
+    1,
+    9,
+    4,
+    7,
+    9,
+    3,
+    1,
+    13,
+    12,
+    11,
+    14,
+    2,
+    6,
+    5,
+    10,
+    4,
+    0,
+    15,
+    8,
+    9,
+    0,
+    5,
+    7,
+    2,
+    4,
+    10,
+    15,
+    14,
+    1,
+    11,
+    12,
+    6,
+    8,
+    3,
+    13,
+    2,
+    12,
+    6,
+    10,
+    0,
+    11,
+    8,
+    3,
+    4,
+    13,
+    7,
+    5,
+    15,
+    14,
+    1,
+    9,
+    12,
+    5,
+    1,
+    15,
+    14,
+    13,
+    4,
+    10,
+    0,
+    7,
+    6,
+    3,
+    9,
+    2,
+    8,
+    11,
+    13,
+    11,
+    7,
+    14,
+    12,
+    1,
+    3,
+    9,
+    5,
+    0,
+    15,
+    4,
+    8,
+    6,
+    2,
+    10,
+    6,
+    15,
+    14,
+    9,
+    11,
+    3,
+    0,
+    8,
+    12,
+    2,
+    13,
+    7,
+    1,
+    4,
+    10,
+    5,
+    10,
+    2,
+    8,
+    4,
+    7,
+    6,
+    1,
+    5,
+    15,
+    11,
+    9,
+    14,
+    3,
+    12,
+    13,
+    0,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    14,
+    10,
+    4,
+    8,
+    9,
+    15,
+    13,
+    6,
+    1,
+    12,
+    0,
+    2,
+    11,
+    7,
+    5,
+    3,
+    // Blake1, unused in others
+    11,
+    8,
+    12,
+    0,
+    5,
+    2,
+    15,
+    13,
+    10,
+    14,
+    3,
+    6,
+    7,
+    1,
+    9,
+    4,
+    7,
+    9,
+    3,
+    1,
+    13,
+    12,
+    11,
+    14,
+    2,
+    6,
+    5,
+    10,
+    4,
+    0,
+    15,
+    8,
+    9,
+    0,
+    5,
+    7,
+    2,
+    4,
+    10,
+    15,
+    14,
+    1,
+    11,
+    12,
+    6,
+    8,
+    3,
+    13,
+    2,
+    12,
+    6,
+    10,
+    0,
+    11,
+    8,
+    3,
+    4,
+    13,
+    7,
+    5,
+    15,
+    14,
+    1,
+    9
+  ]);
+
+  // work/node_modules/@noble/hashes/_u64.js
+  var fromNumH = (n) => n / 2 ** 32 | 0;
+  var fromNumL = (n) => n >>> 0;
+  var rotrSH = (h, l, s) => h >>> s | l << 32 - s;
+  var rotrSL = (h, l, s) => h << 32 - s | l >>> s;
+  var rotrBH = (h, l, s) => h << 64 - s | l >>> s - 32;
+  var rotrBL = (h, l, s) => h >>> s - 32 | l << 64 - s;
+  var rotr32H = (_h, l) => l;
+  var rotr32L = (h, _l) => h;
+  function add(Ah, Al, Bh, Bl) {
+    const l = (Al >>> 0) + (Bl >>> 0);
+    return { h: Ah + Bh + (l / 2 ** 32 | 0) | 0, l: l | 0 };
+  }
+  var add3L = (Al, Bl, Cl) => (Al >>> 0) + (Bl >>> 0) + (Cl >>> 0);
+  var add3H = (low, Ah, Bh, Ch) => Ah + Bh + Ch + (low / 2 ** 32 | 0) | 0;
+
+  // work/node_modules/@noble/hashes/blake2.js
+  var B2B_IV = /* @__PURE__ */ Uint32Array.from([
+    4089235720,
+    1779033703,
+    2227873595,
+    3144134277,
+    4271175723,
+    1013904242,
+    1595750129,
+    2773480762,
+    2917565137,
+    1359893119,
+    725511199,
+    2600822924,
+    4215389547,
+    528734635,
+    327033209,
+    1541459225
+  ]);
+  var BBUF = /* @__PURE__ */ new Uint32Array(32);
+  function G1b(a, b, c, d, msg, x) {
+    const Xl = msg[x], Xh = msg[x + 1];
+    let Al = BBUF[2 * a], Ah = BBUF[2 * a + 1];
+    let Bl = BBUF[2 * b], Bh = BBUF[2 * b + 1];
+    let Cl = BBUF[2 * c], Ch = BBUF[2 * c + 1];
+    let Dl = BBUF[2 * d], Dh = BBUF[2 * d + 1];
+    const ll = add3L(Al, Bl, Xl);
+    Ah = add3H(ll, Ah, Bh, Xh);
+    Al = ll | 0;
+    let xh = Dh ^ Ah, xl = Dl ^ Al;
+    Dh = rotr32H(xh, xl);
+    Dl = rotr32L(xh, xl);
+    ({ h: Ch, l: Cl } = add(Ch, Cl, Dh, Dl));
+    xh = Bh ^ Ch;
+    xl = Bl ^ Cl;
+    Bh = rotrSH(xh, xl, 24);
+    Bl = rotrSL(xh, xl, 24);
+    BBUF[2 * a] = Al;
+    BBUF[2 * a + 1] = Ah;
+    BBUF[2 * b] = Bl;
+    BBUF[2 * b + 1] = Bh;
+    BBUF[2 * c] = Cl;
+    BBUF[2 * c + 1] = Ch;
+    BBUF[2 * d] = Dl;
+    BBUF[2 * d + 1] = Dh;
+  }
+  function G2b(a, b, c, d, msg, x) {
+    const Xl = msg[x], Xh = msg[x + 1];
+    let Al = BBUF[2 * a], Ah = BBUF[2 * a + 1];
+    let Bl = BBUF[2 * b], Bh = BBUF[2 * b + 1];
+    let Cl = BBUF[2 * c], Ch = BBUF[2 * c + 1];
+    let Dl = BBUF[2 * d], Dh = BBUF[2 * d + 1];
+    const ll = add3L(Al, Bl, Xl);
+    Ah = add3H(ll, Ah, Bh, Xh);
+    Al = ll | 0;
+    let xh = Dh ^ Ah, xl = Dl ^ Al;
+    Dh = rotrSH(xh, xl, 16);
+    Dl = rotrSL(xh, xl, 16);
+    ({ h: Ch, l: Cl } = add(Ch, Cl, Dh, Dl));
+    xh = Bh ^ Ch;
+    xl = Bl ^ Cl;
+    Bh = rotrBH(xh, xl, 63);
+    Bl = rotrBL(xh, xl, 63);
+    BBUF[2 * a] = Al;
+    BBUF[2 * a + 1] = Ah;
+    BBUF[2 * b] = Bl;
+    BBUF[2 * b + 1] = Bh;
+    BBUF[2 * c] = Cl;
+    BBUF[2 * c + 1] = Ch;
+    BBUF[2 * d] = Dl;
+    BBUF[2 * d + 1] = Dh;
+  }
+  function checkBlake2Opts(outputLen, opts = {}, keyLen, saltLen, persLen) {
+    anumber(keyLen);
+    if (outputLen <= 0 || outputLen > keyLen)
+      throw new Error('"dkLen" must be 1..' + keyLen + ", got " + outputLen);
+    const { key, salt, personalization } = opts;
+    if (key !== void 0 && (key.length < 1 || key.length > keyLen))
+      throw new Error('"key" expected to be undefined or of length=1..' + keyLen);
+    if (salt !== void 0)
+      abytes(salt, saltLen, "salt");
+    if (personalization !== void 0)
+      abytes(personalization, persLen, "personalization");
+  }
+  var _BLAKE2 = class {
+    buffer;
+    buffer32;
+    finished = false;
+    destroyed = false;
+    length = 0;
+    pos = 0;
+    blockLen;
+    outputLen;
+    canXOF = false;
+    constructor(blockLen, outputLen) {
+      anumber(blockLen);
+      anumber(outputLen);
+      this.blockLen = blockLen;
+      this.outputLen = outputLen;
+      this.buffer = new Uint8Array(blockLen);
+      this.buffer32 = u32(this.buffer);
+    }
+    update(data) {
+      aexists(this);
+      abytes(data);
+      const { blockLen, buffer, buffer32 } = this;
+      const len = data.length;
+      const offset = data.byteOffset;
+      const buf = data.buffer;
+      for (let pos = 0; pos < len; ) {
+        if (this.pos === blockLen) {
+          swap32IfBE(buffer32);
+          this.compress(buffer32, 0, false);
+          swap32IfBE(buffer32);
+          this.pos = 0;
+        }
+        const take = Math.min(blockLen - this.pos, len - pos);
+        const dataOffset = offset + pos;
+        if (take === blockLen && !(dataOffset % 4) && pos + take < len) {
+          const data32 = new Uint32Array(buf, dataOffset, Math.floor((len - pos) / 4));
+          swap32IfBE(data32);
+          for (let pos32 = 0; pos + blockLen < len; pos32 += buffer32.length, pos += blockLen) {
+            this.length += blockLen;
+            this.compress(data32, pos32, false);
+          }
+          swap32IfBE(data32);
+          continue;
+        }
+        buffer.set(pos === 0 && take === len ? data : data.subarray(pos, pos + take), this.pos);
+        this.pos += take;
+        this.length += take;
+        pos += take;
+      }
+      return this;
+    }
+    digestInto(out) {
+      aexists(this);
+      aoutput(out, this);
+      if (out.byteOffset & 3)
+        throw new RangeError('"output" expected 4-byte aligned byteOffset, got ' + out.byteOffset);
+      const { pos, buffer32 } = this;
+      this.finished = true;
+      this.buffer.fill(0, pos);
+      swap32IfBE(buffer32);
+      this.compress(buffer32, 0, true);
+      swap32IfBE(buffer32);
+      const state = this.get();
+      const out32 = out === this.buffer ? buffer32 : u32(out);
+      const full = Math.floor(this.outputLen / 4);
+      for (let i = 0; i < full; i++)
+        out32[i] = swap8IfBE(state[i]);
+      const tail = this.outputLen % 4;
+      if (!tail)
+        return;
+      const off = full * 4;
+      const word = state[full];
+      for (let i = 0; i < tail; i++)
+        out[off + i] = word >>> 8 * i;
+    }
+    digest() {
+      const { buffer, outputLen } = this;
+      this.digestInto(buffer);
+      const res = buffer.slice(0, outputLen);
+      this.destroy();
+      return res;
+    }
+    _cloneInto(to) {
+      const { buffer, length, finished, destroyed, outputLen, pos } = this;
+      to ||= new this.constructor({ dkLen: outputLen });
+      to.set(...this.get());
+      to.buffer.set(buffer);
+      to.destroyed = destroyed;
+      to.finished = finished;
+      to.length = length;
+      to.pos = pos;
+      to.outputLen = outputLen;
+      return to;
+    }
+    clone() {
+      return this._cloneInto();
+    }
+  };
+  var _BLAKE2b = class extends _BLAKE2 {
+    // Same IV words as SHA-512 / BLAKE2b, encoded as LE u32 low/high halves.
+    v0l = B2B_IV[0] | 0;
+    v0h = B2B_IV[1] | 0;
+    v1l = B2B_IV[2] | 0;
+    v1h = B2B_IV[3] | 0;
+    v2l = B2B_IV[4] | 0;
+    v2h = B2B_IV[5] | 0;
+    v3l = B2B_IV[6] | 0;
+    v3h = B2B_IV[7] | 0;
+    v4l = B2B_IV[8] | 0;
+    v4h = B2B_IV[9] | 0;
+    v5l = B2B_IV[10] | 0;
+    v5h = B2B_IV[11] | 0;
+    v6l = B2B_IV[12] | 0;
+    v6h = B2B_IV[13] | 0;
+    v7l = B2B_IV[14] | 0;
+    v7h = B2B_IV[15] | 0;
+    constructor(opts = {}) {
+      opts = checkOpts({}, opts);
+      const olen = opts.dkLen === void 0 ? 64 : opts.dkLen;
+      super(128, olen);
+      checkBlake2Opts(olen, opts, 64, 16, 16);
+      let { key, personalization, salt } = opts;
+      let keyLength = 0;
+      if (key !== void 0) {
+        abytes(key, void 0, "key");
+        keyLength = key.length;
+      }
+      this.v0l ^= this.outputLen | keyLength << 8 | 1 << 16 | 1 << 24;
+      if (salt !== void 0) {
+        abytes(salt, void 0, "salt");
+        const slt = u32(copyBytes(salt));
+        this.v4l ^= swap8IfBE(slt[0]);
+        this.v4h ^= swap8IfBE(slt[1]);
+        this.v5l ^= swap8IfBE(slt[2]);
+        this.v5h ^= swap8IfBE(slt[3]);
+      }
+      if (personalization !== void 0) {
+        abytes(personalization, void 0, "personalization");
+        const pers = u32(copyBytes(personalization));
+        this.v6l ^= swap8IfBE(pers[0]);
+        this.v6h ^= swap8IfBE(pers[1]);
+        this.v7l ^= swap8IfBE(pers[2]);
+        this.v7h ^= swap8IfBE(pers[3]);
+      }
+      if (key !== void 0) {
+        const tmp = new Uint8Array(this.blockLen);
+        tmp.set(key);
+        this.update(tmp);
+        clean(tmp);
+      }
+    }
+    // prettier-ignore
+    get() {
+      let { v0l, v0h, v1l, v1h, v2l, v2h, v3l, v3h, v4l, v4h, v5l, v5h, v6l, v6h, v7l, v7h } = this;
+      return [v0l, v0h, v1l, v1h, v2l, v2h, v3l, v3h, v4l, v4h, v5l, v5h, v6l, v6h, v7l, v7h];
+    }
+    // prettier-ignore
+    set(v0l, v0h, v1l, v1h, v2l, v2h, v3l, v3h, v4l, v4h, v5l, v5h, v6l, v6h, v7l, v7h) {
+      this.v0l = v0l | 0;
+      this.v0h = v0h | 0;
+      this.v1l = v1l | 0;
+      this.v1h = v1h | 0;
+      this.v2l = v2l | 0;
+      this.v2h = v2h | 0;
+      this.v3l = v3l | 0;
+      this.v3h = v3h | 0;
+      this.v4l = v4l | 0;
+      this.v4h = v4h | 0;
+      this.v5l = v5l | 0;
+      this.v5h = v5h | 0;
+      this.v6l = v6l | 0;
+      this.v6h = v6h | 0;
+      this.v7l = v7l | 0;
+      this.v7h = v7h | 0;
+    }
+    compress(msg, offset, isLast) {
+      const { v0l, v0h, v1l, v1h, v2l, v2h, v3l, v3h, v4l, v4h, v5l, v5h, v6l, v6h, v7l, v7h } = this;
+      {
+        BBUF[0] = v0l;
+        BBUF[1] = v0h;
+        BBUF[2] = v1l;
+        BBUF[3] = v1h;
+        BBUF[4] = v2l;
+        BBUF[5] = v2h;
+        BBUF[6] = v3l;
+        BBUF[7] = v3h;
+        BBUF[8] = v4l;
+        BBUF[9] = v4h;
+        BBUF[10] = v5l;
+        BBUF[11] = v5h;
+        BBUF[12] = v6l;
+        BBUF[13] = v6h;
+        BBUF[14] = v7l;
+        BBUF[15] = v7h;
+      }
+      BBUF.set(B2B_IV, 16);
+      const l = fromNumL(this.length);
+      const h = fromNumH(this.length);
+      BBUF[24] = B2B_IV[8] ^ l;
+      BBUF[25] = B2B_IV[9] ^ h;
+      if (isLast) {
+        BBUF[28] = ~BBUF[28];
+        BBUF[29] = ~BBUF[29];
+      }
+      let j = 0;
+      const s = BSIGMA;
+      for (let i = 0; i < 12; i++) {
+        G1b(0, 4, 8, 12, msg, offset + 2 * s[j++]);
+        G2b(0, 4, 8, 12, msg, offset + 2 * s[j++]);
+        G1b(1, 5, 9, 13, msg, offset + 2 * s[j++]);
+        G2b(1, 5, 9, 13, msg, offset + 2 * s[j++]);
+        G1b(2, 6, 10, 14, msg, offset + 2 * s[j++]);
+        G2b(2, 6, 10, 14, msg, offset + 2 * s[j++]);
+        G1b(3, 7, 11, 15, msg, offset + 2 * s[j++]);
+        G2b(3, 7, 11, 15, msg, offset + 2 * s[j++]);
+        G1b(0, 5, 10, 15, msg, offset + 2 * s[j++]);
+        G2b(0, 5, 10, 15, msg, offset + 2 * s[j++]);
+        G1b(1, 6, 11, 12, msg, offset + 2 * s[j++]);
+        G2b(1, 6, 11, 12, msg, offset + 2 * s[j++]);
+        G1b(2, 7, 8, 13, msg, offset + 2 * s[j++]);
+        G2b(2, 7, 8, 13, msg, offset + 2 * s[j++]);
+        G1b(3, 4, 9, 14, msg, offset + 2 * s[j++]);
+        G2b(3, 4, 9, 14, msg, offset + 2 * s[j++]);
+      }
+      this.v0l ^= BBUF[0] ^ BBUF[16];
+      this.v0h ^= BBUF[1] ^ BBUF[17];
+      this.v1l ^= BBUF[2] ^ BBUF[18];
+      this.v1h ^= BBUF[3] ^ BBUF[19];
+      this.v2l ^= BBUF[4] ^ BBUF[20];
+      this.v2h ^= BBUF[5] ^ BBUF[21];
+      this.v3l ^= BBUF[6] ^ BBUF[22];
+      this.v3h ^= BBUF[7] ^ BBUF[23];
+      this.v4l ^= BBUF[8] ^ BBUF[24];
+      this.v4h ^= BBUF[9] ^ BBUF[25];
+      this.v5l ^= BBUF[10] ^ BBUF[26];
+      this.v5h ^= BBUF[11] ^ BBUF[27];
+      this.v6l ^= BBUF[12] ^ BBUF[28];
+      this.v6h ^= BBUF[13] ^ BBUF[29];
+      this.v7l ^= BBUF[14] ^ BBUF[30];
+      this.v7h ^= BBUF[15] ^ BBUF[31];
+      clean(BBUF);
+    }
+    destroy() {
+      this.destroyed = true;
+      clean(this.buffer32);
+      this.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+  };
+  var blake2b = /* @__PURE__ */ createHasher((opts) => new _BLAKE2b(opts));
+
+  // work/node_modules/@noble/hashes/argon2.js
+  var AT = { Argon2d: 0, Argon2i: 1, Argon2id: 2 };
+  var ARGON2_SYNC_POINTS = 4;
+  var abytesOrZero = (buf, errorTitle = "") => {
+    if (buf === void 0)
+      return Uint8Array.of();
+    return kdfInputToBytes(buf, errorTitle);
+  };
+  var A2_BUF = new Uint32Array(256);
+  function G(a, b, c, d) {
+    let Al = A2_BUF[2 * a], Ah = A2_BUF[2 * a + 1];
+    let Bl = A2_BUF[2 * b], Bh = A2_BUF[2 * b + 1];
+    let Cl = A2_BUF[2 * c], Ch = A2_BUF[2 * c + 1];
+    let Dl = A2_BUF[2 * d], Dh = A2_BUF[2 * d + 1];
+    let ml = 0, mh = 0, rl = 0, xh = 0, xl = 0;
+    ml = Math.imul(Al, Bl);
+    mh = ((Al >>> 0) * (Bl >>> 0) - (ml >>> 0)) / 4294967296 + 0.5 | 0;
+    rl = (Al >>> 0) + (Bl >>> 0) + (ml << 1 >>> 0);
+    Ah = Ah + Bh + (mh << 1 | ml >>> 31) + (rl / 4294967296 | 0) | 0;
+    Al = rl | 0;
+    xh = Dh ^ Ah;
+    xl = Dl ^ Al;
+    Dh = xl;
+    Dl = xh;
+    ml = Math.imul(Cl, Dl);
+    mh = ((Cl >>> 0) * (Dl >>> 0) - (ml >>> 0)) / 4294967296 + 0.5 | 0;
+    rl = (Cl >>> 0) + (Dl >>> 0) + (ml << 1 >>> 0);
+    Ch = Ch + Dh + (mh << 1 | ml >>> 31) + (rl / 4294967296 | 0) | 0;
+    Cl = rl | 0;
+    xh = Bh ^ Ch;
+    xl = Bl ^ Cl;
+    Bh = xh >>> 24 | xl << 8;
+    Bl = xh << 8 | xl >>> 24;
+    ml = Math.imul(Al, Bl);
+    mh = ((Al >>> 0) * (Bl >>> 0) - (ml >>> 0)) / 4294967296 + 0.5 | 0;
+    rl = (Al >>> 0) + (Bl >>> 0) + (ml << 1 >>> 0);
+    Ah = Ah + Bh + (mh << 1 | ml >>> 31) + (rl / 4294967296 | 0) | 0;
+    Al = rl | 0;
+    xh = Dh ^ Ah;
+    xl = Dl ^ Al;
+    Dh = xh >>> 16 | xl << 16;
+    Dl = xh << 16 | xl >>> 16;
+    ml = Math.imul(Cl, Dl);
+    mh = ((Cl >>> 0) * (Dl >>> 0) - (ml >>> 0)) / 4294967296 + 0.5 | 0;
+    rl = (Cl >>> 0) + (Dl >>> 0) + (ml << 1 >>> 0);
+    Ch = Ch + Dh + (mh << 1 | ml >>> 31) + (rl / 4294967296 | 0) | 0;
+    Cl = rl | 0;
+    xh = Bh ^ Ch;
+    xl = Bl ^ Cl;
+    Bh = xh << 1 | xl >>> 31;
+    Bl = xh >>> 31 | xl << 1;
+    A2_BUF[2 * a] = Al, A2_BUF[2 * a + 1] = Ah;
+    A2_BUF[2 * b] = Bl, A2_BUF[2 * b + 1] = Bh;
+    A2_BUF[2 * c] = Cl, A2_BUF[2 * c + 1] = Ch;
+    A2_BUF[2 * d] = Dl, A2_BUF[2 * d + 1] = Dh;
+  }
+  function P(v00, v01, v02, v03, v04, v05, v06, v07, v08, v09, v10, v11, v12, v13, v14, v15) {
+    G(v00, v04, v08, v12);
+    G(v01, v05, v09, v13);
+    G(v02, v06, v10, v14);
+    G(v03, v07, v11, v15);
+    G(v00, v05, v10, v15);
+    G(v01, v06, v11, v12);
+    G(v02, v07, v08, v13);
+    G(v03, v04, v09, v14);
+  }
+  function block(x, xPos, yPos, outPos, needXor) {
+    if (needXor) {
+      for (let i = 0; i < 256; i++) {
+        const r = x[xPos + i] ^ x[yPos + i];
+        A2_BUF[i] = r;
+        x[outPos + i] ^= r;
+      }
+    } else {
+      for (let i = 0; i < 256; i++) {
+        const r = x[xPos + i] ^ x[yPos + i];
+        A2_BUF[i] = r;
+        x[outPos + i] = r;
+      }
+    }
+    for (let i = 0; i < 128; i += 16) {
+      P(i, i + 1, i + 2, i + 3, i + 4, i + 5, i + 6, i + 7, i + 8, i + 9, i + 10, i + 11, i + 12, i + 13, i + 14, i + 15);
+    }
+    for (let i = 0; i < 16; i += 2) {
+      P(i, i + 1, i + 16, i + 17, i + 32, i + 33, i + 48, i + 49, i + 64, i + 65, i + 80, i + 81, i + 96, i + 97, i + 112, i + 113);
+    }
+    for (let i = 0; i < 256; i++)
+      x[outPos + i] ^= A2_BUF[i];
+    clean(A2_BUF);
+  }
+  function Hp(A, dkLen) {
+    const A8 = u8(A);
+    const T = new Uint32Array(1);
+    const T8 = u8(T);
+    T[0] = swap8IfBE(dkLen);
+    if (dkLen <= 64)
+      return blake2b.create({ dkLen }).update(T8).update(A8).digest();
+    const out = new Uint8Array(dkLen);
+    let V = blake2b.create({}).update(T8).update(A8).digest();
+    let pos = 0;
+    out.set(V.subarray(0, 32));
+    pos += 32;
+    for (; dkLen - pos > 64; pos += 32) {
+      const Vh = blake2b.create({}).update(V);
+      Vh.digestInto(V);
+      Vh.destroy();
+      out.set(V.subarray(0, 32), pos);
+    }
+    out.set(blake2b(V, { dkLen: dkLen - pos }), pos);
+    clean(V, T);
+    return out;
+  }
+  function indexAlpha(r, s, laneLen, segmentLen, index, randL, sameLane = false) {
+    let area;
+    if (r === 0) {
+      if (s === 0)
+        area = index - 1;
+      else if (sameLane)
+        area = s * segmentLen + index - 1;
+      else
+        area = s * segmentLen + (index == 0 ? -1 : 0);
+    } else if (sameLane)
+      area = laneLen - segmentLen + index - 1;
+    else
+      area = laneLen - segmentLen + (index == 0 ? -1 : 0);
+    const startPos = r !== 0 && s !== ARGON2_SYNC_POINTS - 1 ? (s + 1) * segmentLen : 0;
+    const randLow = Math.imul(randL, randL);
+    const randHigh = ((randL >>> 0) * (randL >>> 0) - (randLow >>> 0)) / 4294967296 + 0.5 | 0;
+    const areaLow = Math.imul(area, randHigh);
+    const areaHigh = ((area >>> 0) * (randHigh >>> 0) - (areaLow >>> 0)) / 4294967296 + 0.5 | 0;
+    const rel = area - 1 - areaHigh;
+    return (startPos + rel) % laneLen;
+  }
+  var maxUint32 = Math.pow(2, 32);
+  var ARGON2_DEFAULT_MEMORY = 1024 ** 2;
+  var ARGON2_DEFAULT_MAXMEM = ARGON2_DEFAULT_MEMORY * 1024;
+  function isU32(num) {
+    return Number.isSafeInteger(num) && num >= 0 && num < maxUint32;
+  }
+  function argon2Opts(opts = {}) {
+    opts = checkOpts({}, opts);
+    const merged = {
+      t: 3,
+      m: ARGON2_DEFAULT_MEMORY,
+      p: 1,
+      version: 19,
+      dkLen: 32,
+      maxmem: ARGON2_DEFAULT_MAXMEM,
+      asyncTick: 10
+    };
+    for (let [k, v] of Object.entries(opts))
+      if (v !== void 0)
+        merged[k] = v;
+    const { dkLen, p, m, t, version, onProgress, asyncTick } = merged;
+    if (!isU32(dkLen) || dkLen < 4)
+      throw new Error('"dkLen" must be 4..');
+    if (!isU32(p) || p < 1 || p >= Math.pow(2, 24))
+      throw new Error('"p" must be 1..2^24');
+    if (!isU32(m))
+      throw new Error('"m" must be 0..2^32');
+    if (!isU32(t) || t < 1)
+      throw new Error('"t" (iterations) must be 1..2^32');
+    if (onProgress !== void 0 && typeof onProgress !== "function")
+      throw new Error('"onProgress" must be a function');
+    anumber(asyncTick, "asyncTick");
+    if (!isU32(m) || m < 8 * p)
+      throw new Error('"m" (memory) must be at least 8*p bytes');
+    if (version !== 16 && version !== 19)
+      throw new Error('"version" must be 0x10 or 0x13, got ' + version);
+    return merged;
+  }
+  function argon2InitialHash(password, salt, type, opts) {
+    const ownedInputs = [];
+    const BUF = new Uint32Array(1);
+    const BUF8 = u8(BUF);
+    let h;
+    let H0;
+    let succeeded = false;
+    const rememberOwned = (input, bytes) => {
+      if (typeof input === "string")
+        ownedInputs.push(bytes);
+      return bytes;
+    };
+    try {
+      const passwordBytes = rememberOwned(password, kdfInputToBytes(password, "password"));
+      const saltBytes = rememberOwned(salt, kdfInputToBytes(salt, "salt"));
+      if (!isU32(passwordBytes.length))
+        throw new Error('"password" must be less of length 1..4Gb');
+      if (!isU32(saltBytes.length) || saltBytes.length < 8)
+        throw new Error('"salt" must be of length 8..4Gb');
+      if (!Object.values(AT).includes(type))
+        throw new Error('"type" was invalid');
+      let { p, dkLen, m, t, version, key, personalization, maxmem, onProgress, asyncTick } = argon2Opts(opts);
+      const keyInput = key;
+      key = rememberOwned(keyInput, abytesOrZero(keyInput, "key"));
+      const personalizationInput = personalization;
+      personalization = rememberOwned(personalizationInput, abytesOrZero(personalizationInput, "personalization"));
+      h = blake2b.create();
+      for (let item of [p, dkLen, m, t, version, type]) {
+        BUF[0] = swap8IfBE(item);
+        h.update(BUF8);
+      }
+      for (let i of [passwordBytes, saltBytes, key, personalization]) {
+        BUF[0] = swap8IfBE(i.length);
+        h.update(BUF8).update(i);
+      }
+      H0 = new Uint32Array(18);
+      h.digestInto(u8(H0));
+      succeeded = true;
+      return { H0, p, dkLen, m, t, version, maxmem, onProgress, asyncTick };
+    } finally {
+      if (h)
+        h.destroy();
+      clean(BUF, ...ownedInputs);
+      if (!succeeded && H0)
+        clean(H0);
+    }
+  }
+  function argon2Init(password, salt, type, opts) {
+    const { H0, p, dkLen, m, t, version, maxmem, onProgress, asyncTick } = argon2InitialHash(password, salt, type, opts);
+    try {
+      const lanes = p;
+      const mP = 4 * p * Math.floor(m / (ARGON2_SYNC_POINTS * p));
+      const laneLen = Math.floor(mP / p);
+      const segmentLen = Math.floor(laneLen / ARGON2_SYNC_POINTS);
+      const memUsed = mP * 1024;
+      if (!isU32(maxmem))
+        throw new Error('"maxmem" expected <2**32, got ' + maxmem);
+      if (memUsed > maxmem)
+        throw new Error('"maxmem" limit was hit: memUsed(mP*1024)=' + memUsed + ", maxmem=" + maxmem);
+      const B = new Uint32Array(memUsed / 4);
+      for (let l = 0; l < p; l++) {
+        const i = 256 * laneLen * l;
+        H0[17] = swap8IfBE(l);
+        H0[16] = swap8IfBE(0);
+        B.set(swap32IfBE(u32(Hp(H0, 1024))), i);
+        H0[16] = swap8IfBE(1);
+        B.set(swap32IfBE(u32(Hp(H0, 1024))), i + 256);
+      }
+      let perBlock = () => {
+      };
+      if (onProgress) {
+        const totalBlock = t * ARGON2_SYNC_POINTS * p * segmentLen - 2 * p;
+        const callbackPer = Math.max(Math.floor(totalBlock / 1e4), 1);
+        let blockCnt = 0;
+        perBlock = () => {
+          blockCnt++;
+          if (onProgress && (!(blockCnt % callbackPer) || blockCnt === totalBlock))
+            onProgress(blockCnt / totalBlock);
+        };
+      }
+      return { type, mP, p, t, version, B, laneLen, lanes, segmentLen, dkLen, perBlock, asyncTick };
+    } finally {
+      clean(H0);
+    }
+  }
+  function argon2Output(B, p, laneLen, dkLen) {
+    const B_final = new Uint32Array(256);
+    for (let l = 0; l < p; l++)
+      for (let j = 0; j < 256; j++)
+        B_final[j] ^= B[256 * (laneLen * l + laneLen - 1) + j];
+    const res = Hp(swap32IfBE(B_final), dkLen);
+    clean(B, B_final);
+    return res;
+  }
+  function* argon2Blocks(ctx, address) {
+    const { type, mP, p, t, version, B, laneLen, lanes, segmentLen, perBlock } = ctx;
+    address[256 + 6] = mP;
+    address[256 + 8] = t;
+    address[256 + 10] = type;
+    for (let r = 0; r < t; r++) {
+      const needXor = r !== 0 && version === 19;
+      address[256 + 0] = r;
+      for (let s = 0; s < ARGON2_SYNC_POINTS; s++) {
+        address[256 + 4] = s;
+        const dataIndependent = type == AT.Argon2i || type == AT.Argon2id && r === 0 && s < 2;
+        for (let l = 0; l < p; l++) {
+          address[256 + 2] = l;
+          address[256 + 12] = 0;
+          let startPos = 0;
+          if (r === 0 && s === 0) {
+            startPos = 2;
+            if (dataIndependent) {
+              address[256 + 12]++;
+              block(address, 256, 2 * 256, 0, false);
+              block(address, 0, 2 * 256, 0, false);
+            }
+          }
+          let offset = l * laneLen + s * segmentLen + startPos;
+          for (let index = startPos; index < segmentLen; index++, offset++) {
+            perBlock();
+            const prev = offset % laneLen ? offset - 1 : offset + laneLen - 1;
+            let randL, randH;
+            if (dataIndependent) {
+              let i128 = index % 128;
+              if (i128 === 0) {
+                address[256 + 12]++;
+                block(address, 256, 2 * 256, 0, false);
+                block(address, 0, 2 * 256, 0, false);
+              }
+              randL = address[2 * i128];
+              randH = address[2 * i128 + 1];
+            } else {
+              const T = 256 * prev;
+              randL = B[T];
+              randH = B[T + 1];
+            }
+            const refLane = r === 0 && s === 0 ? l : randH % lanes;
+            const refPos = indexAlpha(r, s, laneLen, segmentLen, index, randL, refLane == l);
+            const refBlock = laneLen * refLane + refPos;
+            block(B, 256 * prev, 256 * refBlock, offset * 256, needXor);
+            yield;
+          }
+        }
+      }
+    }
+    clean(address);
+  }
+  async function argon2Async(type, password, salt, opts) {
+    const ctx = argon2Init(password, salt, type, opts);
+    const address = new Uint32Array(3 * 256);
+    const blocks = argon2Blocks(ctx, address);
+    const abort = () => clean(address, ctx.B);
+    let ts = Date.now();
+    while (!blocks.next().done) {
+      const diff = Date.now() - ts;
+      if (diff >= 0 && diff < ctx.asyncTick)
+        continue;
+      await nextTick(abort);
+      ts = Date.now();
+    }
+    return argon2Output(ctx.B, ctx.p, ctx.laneLen, ctx.dkLen);
+  }
+  var argon2idAsync = (password, salt, opts = {}) => argon2Async(AT.Argon2id, password, salt, opts);
+
+  // work/termark.js
+  var utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+  var encode = new TextEncoder();
+  var prefix = "enc:v1:";
+  var checkText = "termark-local-data-key-check-v1";
+  function requireFormat(condition, message = "\u65E0\u6CD5\u8BFB\u53D6 Bolt \u6570\u636E\u5E93\u7ED3\u6784\u3002\u8BF7\u5728 Termark \u9000\u51FA\u540E\uFF0C\u91CD\u65B0\u590D\u5236 termark.db \u518D\u8BD5\u3002") {
+    if (!condition) throw new Error(message);
+  }
+  function readBolt(buffer) {
+    const view = new DataView(buffer);
+    const bytes = new Uint8Array(buffer);
+    const u16 = (offset) => view.getUint16(offset, true);
+    const u322 = (offset) => view.getUint32(offset, true);
+    const u64 = (offset) => view.getBigUint64(offset, true);
+    function meta(offset) {
+      if (offset + 80 > bytes.length || u16(offset + 8) !== 4 || u322(offset + 16) !== 3977042669 || u322(offset + 20) !== 2) return;
+      const pageSize = u322(offset + 24);
+      if (pageSize < 1024 || pageSize > 65536 || pageSize & pageSize - 1 || offset !== 0 && offset !== pageSize) return;
+      let checksum = 0xcbf29ce484222325n;
+      for (const byte of bytes.subarray(offset + 16, offset + 72)) {
+        checksum = BigInt.asUintN(64, (checksum ^ BigInt(byte)) * 0x100000001b3n);
+      }
+      if (checksum !== u64(offset + 72)) return;
+      return { pageSize, root: u64(offset + 32), limit: u64(offset + 56), tx: u64(offset + 64) };
+    }
+    let active = meta(0);
+    for (let offset = 1024; offset <= 65536; offset *= 2) {
+      const other = meta(offset);
+      if (other && (!active || other.pageSize === active.pageSize && other.tx > active.tx)) active = other;
+    }
+    requireFormat(active, "\u8BF7\u9009\u62E9 Termark \u7684 termark.db\u3002\u6587\u4EF6\u5E94\u4E3A Termark \u672C\u5730 Bolt \u6570\u636E\u5E93\u3002");
+    function page(id) {
+      requireFormat(id >= 2n && id < active.limit);
+      const offset = Number(id) * active.pageSize;
+      requireFormat(Number.isSafeInteger(offset) && offset + 16 <= bytes.length && u64(offset) === id);
+      const overflow = u322(offset + 12);
+      const end = offset + (overflow + 1) * active.pageSize;
+      requireFormat(end <= bytes.length && id + BigInt(overflow) < active.limit);
+      return [offset, end];
+    }
+    function bucket(root, inlineOffset = 0, inlineEnd = 0) {
+      const entries = /* @__PURE__ */ new Map();
+      const seen = /* @__PURE__ */ new Set();
+      function scan(id, depth) {
+        requireFormat(depth <= 32 && !seen.has(id));
+        seen.add(id);
+        const [start, end] = id === 0n ? [inlineOffset, inlineEnd] : page(id);
+        requireFormat(start + 16 <= end);
+        const kind = u16(start + 8);
+        const count = u16(start + 10);
+        const elementsEnd = start + 16 + count * 16;
+        requireFormat((kind === 1 || kind === 2) && elementsEnd <= end);
+        for (let index = 0; index < count; index++) {
+          const entry = start + 16 + index * 16;
+          if (kind === 1) {
+            const child = u64(entry + 8);
+            requireFormat(child >= 2n);
+            scan(child, depth + 1);
+            continue;
+          }
+          const flags = u322(entry);
+          const keyStart = entry + u322(entry + 4);
+          const valueStart = keyStart + u322(entry + 8);
+          const valueEnd = valueStart + u322(entry + 12);
+          requireFormat(keyStart >= elementsEnd && valueEnd <= end);
+          const name = utf8.decode(bytes.subarray(keyStart, valueStart));
+          entries.set(name, { flags, start: valueStart, end: valueEnd });
+        }
+      }
+      scan(root, 0);
+      return entries;
+    }
+    const top = bucket(active.root);
+    return (name) => {
+      const entry = top.get(name);
+      if (!entry) return /* @__PURE__ */ new Map();
+      requireFormat(entry.flags === 1 && entry.start + 16 <= entry.end);
+      const entries = bucket(u64(entry.start), entry.start + 16, entry.end);
+      return new Map([...entries].filter(([, item]) => item.flags === 0).map(([key, item]) => [key, utf8.decode(bytes.subarray(item.start, item.end))]));
+    };
+  }
+  function decodeBase64(input) {
+    const value = input.replace(/\s/g, "").replace(/-/g, "+").replace(/_/g, "/");
+    const unpadded = value.replace(/=+$/, "");
+    requireFormat(/^[A-Za-z0-9+/]*={0,2}$/.test(value) && unpadded.length % 4 !== 1 && (!value.includes("=") || value.length % 4 === 0), "Base64 \u683C\u5F0F\u65E0\u6548\u3002");
+    return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+  }
+  function parseRawKey(input) {
+    const value = input.trim();
+    const hex = value.replace(/^0x/i, "");
+    const key = /^[0-9a-f]{64}$/i.test(hex) ? Uint8Array.from(hex.match(/../g), (pair) => parseInt(pair, 16)) : decodeBase64(value);
+    requireFormat(key.length === 32, "\u672C\u5730\u6570\u636E\u5BC6\u94A5\u5FC5\u987B\u4E3A 32 \u5B57\u8282\u3002\u8BF7\u7C98\u8D34\u94A5\u5319\u4E32\u6761\u76EE\u7684 Base64 \u503C\uFF0C\u6216\u8F93\u5165 64 \u4F4D\u5341\u516D\u8FDB\u5236\u3002");
+    return key;
+  }
+  async function deriveKey(passphrase, kdf) {
+    requireFormat(passphrase.length, "\u8BF7\u8F93\u5165\u672C\u5730\u52A0\u5BC6\u53E3\u4EE4\u3002");
+    requireFormat(kdf, "\u6570\u636E\u5E93\u91CC\u6CA1\u6709\u53E3\u4EE4\u6D3E\u751F\u53C2\u6570\u3002\u53EF\u6539\u7528 32 \u5B57\u8282\u672C\u5730\u6570\u636E\u5BC6\u94A5\u3002");
+    const { version, kdf: algorithm, salt, time, memory, threads } = kdf;
+    requireFormat(version === 1 && algorithm === "argon2id" && typeof salt === "string" && Number.isInteger(time) && time >= 1 && time <= 32 && Number.isInteger(threads) && threads >= 1 && threads <= 32 && Number.isInteger(memory) && memory >= 8 * threads && memory <= 512 * 1024 && memory * time <= 4 * 1024 * 1024, "\u53E3\u4EE4\u6D3E\u751F\u53C2\u6570\u65E0\u6548\uFF0C\u6216\u8D85\u51FA\u4E86\u6D4F\u89C8\u5668\u5DE5\u5177\u7684\u5904\u7406\u4E0A\u9650\u3002");
+    return argon2idAsync(encode.encode(passphrase), decodeBase64(salt), {
+      t: time,
+      m: memory,
+      p: threads,
+      dkLen: 32,
+      version: 19,
+      asyncTick: 12
+    });
+  }
+  async function decryptField(key, value) {
+    requireFormat(value.startsWith(prefix), "\u5BC6\u6587\u5E94\u4EE5 enc:v1: \u5F00\u5934\u3002");
+    const payload = decodeBase64(value.slice(prefix.length));
+    requireFormat(payload.length >= 28, "\u5BC6\u6587\u5B57\u6BB5\u957F\u5EA6\u4E0D\u8DB3\u3002");
+    let result;
+    try {
+      result = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: payload.subarray(0, 12), tagLength: 128 },
+        key,
+        payload.subarray(12)
+      );
+    } catch {
+      throw new Error("\u89E3\u5BC6\u6821\u9A8C\u5931\u8D25\u3002\u8BF7\u6838\u5BF9\u5BC6\u94A5\u548C\u6570\u636E\u5E93\u662F\u5426\u914D\u5957\uFF0C\u6216\u68C0\u67E5\u5BC6\u6587\u662F\u5426\u5B8C\u6574\u3002");
+    }
+    return utf8.decode(result);
+  }
+  var hostFields = {
+    password: "\u4E3B\u673A\u767B\u5F55\u5BC6\u7801",
+    sshPassword: "\u4E3B\u673A\u767B\u5F55\u5BC6\u7801",
+    proxyPassword: "\u4EE3\u7406\u5BC6\u7801",
+    privateKey: "SSH \u79C1\u94A5",
+    passphrase: "SSH \u79C1\u94A5\u53E3\u4EE4",
+    sshPassphrase: "SSH \u79C1\u94A5\u53E3\u4EE4",
+    keyPassphrase: "SSH \u79C1\u94A5\u53E3\u4EE4",
+    privateKeyPassphrase: "SSH \u79C1\u94A5\u53E3\u4EE4"
+  };
+  var credentialFields = { password: "\u767B\u5F55\u5BC6\u7801", privateKey: "SSH \u79C1\u94A5", passphrase: "SSH \u79C1\u94A5\u53E3\u4EE4", keyPassphrase: "SSH \u79C1\u94A5\u53E3\u4EE4" };
+  function fields(record, names) {
+    return Object.entries(names).flatMap(([key, label]) => {
+      const value = record[key];
+      return typeof value === "string" && value.startsWith("enc:") ? [{ label, value }] : [];
+    });
+  }
+  function readDatabase(buffer) {
+    const read = readBolt(buffer);
+    const settings = read("settings");
+    const records = (name) => [...read(name)].map(([id, value]) => [id, JSON.parse(value)]);
+    const credentials = new Map(records("credentials").map(([id, record]) => [record.id || id, { label: record.name || record.username || id, fields: fields(record, credentialFields) }]));
+    const entries = records("hosts").map(([id, host]) => {
+      const bound = credentials.get(host.credentialId);
+      const address = host.address || "";
+      const label = [host.name || address || id, address && address !== host.name ? address : ""].filter(Boolean).join(" \xB7 ");
+      return { label: "\u4E3B\u673A \xB7 " + label, fields: [
+        ...fields(host, hostFields),
+        ...bound?.fields.map((field) => ({ ...field, label: bound.label + " \xB7 " + field.label })) || []
+      ] };
+    });
+    for (const credential of credentials.values()) {
+      entries.push({ label: "\u51ED\u8BC1 \xB7 " + credential.label, fields: credential.fields });
+    }
+    for (const [id, proxy] of records("network_proxies")) {
+      entries.push({ label: "\u4EE3\u7406 \xB7 " + (proxy.name || id), fields: fields(proxy, { password: "\u4EE3\u7406\u5BC6\u7801" }) });
+    }
+    const kdf = settings.get("local_data_key_kdf");
+    return { entries, check: settings.get("local_data_key_check"), kdf: kdf ? JSON.parse(kdf) : null };
+  }
+  async function decryptSnapshot(file2, passphrase) {
+    let envelope;
+    try {
+      envelope = JSON.parse(await file2.text());
+    } catch {
+      throw new Error("\u65E0\u6CD5\u8BFB\u53D6\u540C\u6B65\u5FEB\u7167\u3002\u8BF7\u9009\u62E9\u5B8C\u6574\u7684 Termark .dat \u6587\u4EF6\u3002");
+    }
+    requireFormat(
+      envelope && Number.isSafeInteger(envelope.version) && typeof envelope.data === "string",
+      "\u8FD9\u4E2A\u6587\u4EF6\u7F3A\u5C11 Termark \u540C\u6B65\u5FEB\u7167\u7684 version \u6216 data\u3002"
+    );
+    const payload = decodeBase64(envelope.data);
+    requireFormat(payload.length >= 44, "\u540C\u6B65\u5FEB\u7167\u5BC6\u6587\u957F\u5EA6\u4E0D\u8DB3\u3002\u8BF7\u9009\u62E9\u5B8C\u6574\u7684 .dat \u6587\u4EF6\u3002");
+    const passwordBytes = encode.encode(passphrase);
+    let baseKey;
+    try {
+      baseKey = await crypto.subtle.importKey("raw", passwordBytes, "PBKDF2", false, ["deriveKey"]);
+    } finally {
+      passwordBytes.fill(0);
+    }
+    const key = await crypto.subtle.deriveKey({
+      name: "PBKDF2",
+      hash: "SHA-256",
+      salt: payload.subarray(0, 16),
+      iterations: 6e5
+    }, baseKey, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    let plaintext;
+    try {
+      plaintext = await crypto.subtle.decrypt({
+        name: "AES-GCM",
+        iv: payload.subarray(16, 28),
+        tagLength: 128
+      }, key, payload.subarray(28));
+    } catch {
+      throw new Error("\u540C\u6B65\u5FEB\u7167\u89E3\u5BC6\u6821\u9A8C\u5931\u8D25\u3002\u8BF7\u6838\u5BF9\u540C\u6B65\u5BC6\u7801\u4EE5\u53CA .dat \u6587\u4EF6\u662F\u5426\u5B8C\u6574\u3002");
+    }
+    try {
+      return JSON.parse(utf8.decode(plaintext));
+    } catch {
+      throw new Error("\u540C\u6B65\u5FEB\u7167\u901A\u8FC7\u4E86\u5BC6\u94A5\u6821\u9A8C\uFF0C\u4F46\u89E3\u5BC6\u5185\u5BB9\u65E0\u6CD5\u89E3\u6790\u4E3A JSON\u3002");
+    } finally {
+      new Uint8Array(plaintext).fill(0);
+    }
+  }
+  function showSnapshot(snapshot) {
+    const data = [snapshot, snapshot?.data, snapshot?.snapshot].find(
+      (item) => item && (item.hosts || item.credentials)
+    );
+    const records = (collection) => Array.isArray(collection) ? collection : Object.values(collection || {});
+    const hosts = records(data?.hosts).filter((host) => host && typeof host === "object");
+    const credentials = records(data?.credentials).filter((credential) => credential && typeof credential === "object");
+    const hostFields2 = [
+      "name",
+      "address",
+      "port",
+      "username",
+      "password",
+      "sshPassword",
+      "proxyPassword",
+      "privateKey",
+      "passphrase",
+      "sshPassphrase",
+      "keyPassphrase",
+      "privateKeyPassphrase"
+    ];
+    const credentialFields2 = ["name", "username", "password", "privateKey", "passphrase", "keyPassphrase"];
+    const selectFields = (record, fields2) => Object.fromEntries(fields2.filter(
+      (key) => record && Object.hasOwn(record, key) && record[key] != null && record[key] !== ""
+    ).map((key) => [key, record[key]]));
+    const choices = [
+      ...hosts.map((host) => ({
+        label: ["\u4E3B\u673A", host.name, host.address || host.host, host.username].filter(Boolean).join(" \xB7 "),
+        value: {
+          ...selectFields(host, hostFields2),
+          ...host.credentialId ? { credential: selectFields(
+            credentials.find((credential) => credential.id === host.credentialId),
+            credentialFields2
+          ) } : {}
+        }
+      })),
+      ...credentials.map((credential) => ({
+        label: ["\u51ED\u8BC1", credential.name, credential.username].filter(Boolean).join(" \xB7 "),
+        value: selectFields(credential, credentialFields2)
+      }))
+    ];
+    function labeled(text, element) {
+      const label = document.createElement("label");
+      label.className = "result";
+      label.textContent = text;
+      label.append(element);
+      return label;
+    }
+    if (choices.length) {
+      let showChoice = function() {
+        output2.value = choice.value === "" ? "" : JSON.stringify(choices[Number(choice.value)].value, null, 2);
+      }, filterChoices = function() {
+        const query = search.value.trim().toLowerCase();
+        choice.replaceChildren();
+        for (const [index, item] of choices.entries()) {
+          if (item.label.toLowerCase().includes(query)) choice.add(new Option(item.label, index));
+        }
+        if (!choice.options.length) choice.add(new Option("\u6CA1\u6709\u5339\u914D\u7684\u8BB0\u5F55", ""));
+        showChoice();
+      };
+      const search = document.createElement("input");
+      search.type = "search";
+      search.placeholder = "\u540D\u79F0\u6216 IP \u5730\u5740";
+      const choice = document.createElement("select");
+      const output2 = document.createElement("textarea");
+      output2.readOnly = true;
+      output2.spellcheck = false;
+      output2.rows = 8;
+      search.addEventListener("input", filterChoices);
+      choice.addEventListener("change", showChoice);
+      results.append(labeled("\u67E5\u627E\u4E3B\u673A\u6216\u51ED\u8BC1", search), labeled("\u540C\u6B65\u8BB0\u5F55", choice), labeled("\u89E3\u5BC6\u7ED3\u679C", output2));
+      filterChoices();
+    }
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "\u67E5\u770B\u5B8C\u6574\u7684\u89E3\u5BC6 JSON";
+    const output = document.createElement("textarea");
+    output.readOnly = true;
+    output.spellcheck = false;
+    output.rows = 12;
+    output.setAttribute("aria-label", "\u5B8C\u6574\u7684\u89E3\u5BC6 JSON");
+    details.addEventListener("toggle", () => {
+      output.value = details.open ? JSON.stringify(snapshot, null, 2) : "";
+    });
+    details.append(summary, output);
+    results.append(details);
+  }
+  var get = (id) => document.getElementById(id);
+  var form = get("form");
+  var controls = get("controls");
+  var file = get("database");
+  var target = get("target");
+  var filter = get("filter");
+  var secret = get("secret");
+  var mode = get("mode");
+  var status = get("status");
+  var results = get("results");
+  var database;
+  var fileSequence = 0;
+  var busy = false;
+  function clearResults() {
+    results.replaceChildren();
+    status.textContent = "";
+  }
+  function updateChoices() {
+    const query = filter.value.trim().toLowerCase();
+    const previous = target.value;
+    target.replaceChildren();
+    for (const [index, item] of (database?.entries || []).entries()) {
+      if (item.label.toLowerCase().includes(query)) target.add(new Option(item.label, index));
+    }
+    if ([...target.options].some((option) => option.value === previous)) target.value = previous;
+    if (!target.options.length) target.add(new Option(database ? "\u6CA1\u6709\u5339\u914D\u7684\u8BB0\u5F55" : "\u8BF7\u5148\u9009\u62E9\u6570\u636E\u5E93", ""));
+  }
+  file.addEventListener("change", async () => {
+    const sequence = ++fileSequence;
+    database = null;
+    filter.value = "";
+    clearResults();
+    updateChoices();
+    const selected = file.files[0];
+    if (!selected) return;
+    status.textContent = "\u6B63\u5728\u8BFB\u53D6\u6570\u636E\u5E93\u2026";
+    try {
+      const parsed = readDatabase(await selected.arrayBuffer());
+      if (sequence !== fileSequence) return;
+      database = parsed;
+      updateChoices();
+      status.textContent = "\u5DF2\u8BFB\u53D6 " + database.entries.length + " \u6761\u4E3B\u673A\u3001\u51ED\u8BC1\u548C\u4EE3\u7406\u8BB0\u5F55\u3002";
+    } catch (error) {
+      if (sequence === fileSequence) status.textContent = "\u65E0\u6CD5\u8BFB\u53D6\u6570\u636E\u5E93\u3002" + error.message;
+    }
+  });
+  filter.addEventListener("input", () => {
+    clearResults();
+    updateChoices();
+  });
+  for (const input of [secret, target, get("ciphertext")]) input.addEventListener("input", clearResults);
+  function updateSource() {
+    const source = get("source").value;
+    get("database-inputs").hidden = source !== "database";
+    get("field-inputs").hidden = source !== "field";
+    get("sync-inputs").hidden = source !== "sync";
+    get("key-type").hidden = source === "sync";
+    if (source === "field") mode.value = "raw";
+    updateMode();
+  }
+  function updateMode() {
+    const source = get("source").value;
+    mode.disabled = source !== "database";
+    secret.value = "";
+    const passphrase = mode.value === "passphrase";
+    get("secret-label").textContent = source === "sync" ? "\u540C\u6B65\u5BC6\u7801" : passphrase ? "\u672C\u5730\u52A0\u5BC6\u53E3\u4EE4" : "\u672C\u5730\u6570\u636E\u5BC6\u94A5";
+    secret.placeholder = source === "sync" ? "\u8F93\u5165 Termark \u4E91\u540C\u6B65\u8BBE\u7F6E\u91CC\u7684\u540C\u6B65\u5BC6\u7801" : passphrase ? "\u8F93\u5165\u4F60\u8BBE\u7F6E\u7684\u672C\u5730\u52A0\u5BC6\u53E3\u4EE4" : "Base64 \u6216 64 \u4F4D\u5341\u516D\u8FDB\u5236";
+    clearResults();
+  }
+  get("source").addEventListener("change", updateSource);
+  mode.addEventListener("change", updateMode);
+  get("sync-file").addEventListener("change", clearResults);
+  get("clear").addEventListener("click", () => {
+    secret.value = "";
+    clearResults();
+    secret.focus();
+  });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (busy) return;
+    clearResults();
+    const source = get("source").value;
+    const manual = source === "field";
+    const syncFile = source === "sync" ? get("sync-file").files[0] : null;
+    if (source === "sync" && !syncFile) {
+      status.textContent = "\u8BF7\u5148\u9009\u62E9\u5B8C\u6574\u7684 Termark \u540C\u6B65 .dat \u6587\u4EF6\u3002";
+      return;
+    }
+    const current = source === "database" ? database : null;
+    const selected = current && target.value !== "" ? current.entries[Number(target.value)] : null;
+    const encrypted = manual ? [{ label: "\u660E\u6587", value: get("ciphertext").value.trim() }] : selected?.fields;
+    if (!syncFile && !encrypted?.length) {
+      status.textContent = selected ? "\u8FD9\u6761\u8BB0\u5F55\u6CA1\u6709\u4FDD\u5B58\u53EF\u89E3\u5BC6\u7684\u672C\u5730\u654F\u611F\u5B57\u6BB5\u3002" : "\u8BF7\u5148\u9009\u62E9\u6570\u636E\u5E93\u548C\u8BB0\u5F55\u3002";
+      return;
+    }
+    if (!globalThis.crypto?.subtle) {
+      status.textContent = "\u8BF7\u7528 Chrome\u3001Edge \u6216 Safari \u76F4\u63A5\u6253\u5F00\u4E0B\u8F7D\u7684 HTML \u6587\u4EF6\u3002";
+      return;
+    }
+    busy = true;
+    controls.disabled = true;
+    status.textContent = "\u6B63\u5728\u89E3\u5BC6\u2026";
+    let raw;
+    try {
+      if (syncFile) {
+        showSnapshot(await decryptSnapshot(syncFile, secret.value));
+        status.textContent = "\u540C\u6B65\u5FEB\u7167\u5DF2\u89E3\u5BC6\u3002";
+        return;
+      }
+      raw = mode.value === "passphrase" ? await deriveKey(secret.value, current.kdf) : parseRawKey(secret.value);
+      const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["decrypt"]);
+      raw.fill(0);
+      if (current?.check) {
+        requireFormat(await decryptField(key, current.check) === checkText, "\u6570\u636E\u5E93\u7684\u672C\u5730\u5BC6\u94A5\u6821\u9A8C\u503C\u4E0D\u5339\u914D\u3002");
+      }
+      let count = 0;
+      for (const field of encrypted) {
+        const label = document.createElement("label");
+        label.className = "result";
+        label.textContent = field.label;
+        try {
+          const plaintext = await decryptField(key, field.value);
+          const output = document.createElement("textarea");
+          output.readOnly = true;
+          output.spellcheck = false;
+          output.rows = Math.min(10, Math.max(1, plaintext.split("\n").length));
+          output.value = plaintext;
+          label.append(output);
+          count++;
+        } catch (error) {
+          const detail = document.createElement("span");
+          detail.className = "error";
+          detail.textContent = error.message;
+          label.append(detail);
+        }
+        results.append(label);
+      }
+      status.textContent = "\u5DF2\u89E3\u5BC6 " + count + " / " + encrypted.length + " \u4E2A\u5B57\u6BB5\u3002";
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      raw?.fill(0);
+      controls.disabled = false;
+      busy = false;
+    }
+  });
+  updateSource();
+})();
+</script>
+</body>
+</html>
