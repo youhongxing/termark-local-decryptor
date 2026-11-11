@@ -1,96 +1,147 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="theme-color" content="#f4f7f5">
 <title>Termark Local Decryption Tool</title>
 <style>
-  :root { color-scheme: light dark; --bg: #f1f4f3; --panel: #fff; --ink: #172722; --sub: #51645d; --border: #b8c8c0; --accent: #136047; --button-text: #fff; --error: #9e271f; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #14201d; --panel: #1a2a24; --ink: #e7f0eb; --sub: #aec2b9; --border: #637a6f; --accent: #95e1be; --button-text: #13271e; --error: #ffb4a9; } }
+  :root { color-scheme: light; --page: #f3f6f4; --panel: #fff; --ink: #16251f; --muted: #61736b; --line: #d9e2dc; --accent: #146147; --accent-soft: #e7f3ed; --danger: #a33128; --shadow: 0 12px 40px #1835280c; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 Inter, system-ui, "PingFang SC", sans-serif; }
-  main { max-width: 700px; margin: 0 auto; padding: clamp(22px, 6vw, 60px) 18px; }
-  h1 { font-size: clamp(25px, 6vw, 36px); margin: 0; line-height: 1.2; letter-spacing: -.02em; }
-  header p { color: var(--sub); margin: 12px 0 25px; }
-  .topbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
-  form { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: clamp(16px, 5vw, 30px); }
-  fieldset { padding: 0; margin: 0; border: 0; min-width: 0; }
-  label { display: block; margin: 0 0 15px; font-weight: 600; }
-  select, input, textarea { display: block; margin-top: 5px; width: 100%; min-height: 42px; background: var(--panel); color: var(--ink); border: 1px solid var(--border); border-radius: 8px; padding: 8px 11px; font: inherit; font-weight: 400; }
-  input[type=file] { padding: 6px; }
-  textarea { resize: vertical; }
-  textarea[readonly] { font-family: ui-monospace, monospace; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .hint { display: block; color: var(--sub); font-weight: 400; font-size: .84rem; margin-top: 6px; overflow-wrap: anywhere; }
-  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
-  button { background: var(--accent); color: var(--button-text); font: inherit; font-weight: 650; border: 1px solid var(--accent); border-radius: 8px; padding: 8px 16px; cursor: pointer; }
-  button.secondary { background: transparent; border-color: var(--border); color: var(--ink); }
+  body { margin: 0; min-height: 100vh; color: var(--ink); background: var(--page); font: 15px/1.55 Inter, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+  button, input, select, textarea { font: inherit; }
+  button, select, input, textarea { color: inherit; }
+  .topbar { height: 62px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 11px; font-weight: 720; letter-spacing: -.02em; }
+  .brand-mark { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: white; background: var(--accent); font-size: 15px; }
+  .topbar p { margin: 0; color: var(--muted); font-size: 13px; }
+  .lang-button { min-height: 36px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-weight: 650; cursor: pointer; }
+  .lang-button:hover, .button-secondary:hover { background: var(--accent-soft); }
+  .workspace { display: grid; grid-template-columns: minmax(290px, 350px) minmax(0, 1fr); gap: 18px; max-width: 1440px; min-height: calc(100vh - 62px); padding: 18px; margin: auto; }
+  .sidebar, .content { min-width: 0; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+  .sidebar { display: flex; flex-direction: column; }
+  .panel-section { padding: 18px; border-bottom: 1px solid var(--line); }
+  .panel-section:last-child { border-bottom: 0; }
+  .section-heading { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 720; }
+  label { display: block; margin: 0 0 13px; font-size: 13px; font-weight: 650; }
+  label:last-child { margin-bottom: 0; }
+  select, input:not([type=file]), textarea { display: block; width: 100%; min-height: 40px; margin-top: 5px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); outline: none; }
+  select:focus, input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #1461471a; }
+  input[type=file] { display: block; width: 100%; margin-top: 6px; font-size: 12px; }
+  textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .hint { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }
+  .hint code, details code { font-size: .95em; }
+  #target { min-height: 170px; padding: 5px; }
+  #target option { padding: 6px; }
+  .actions { display: flex; gap: 8px; margin-top: 14px; }
+  .actions button { flex: 1; }
+  .button-primary, .button-secondary { min-height: 40px; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 680; }
+  .button-primary { border: 1px solid var(--accent); color: #fff; background: var(--accent); }
+  .button-primary:hover { background: #0f503a; }
+  .button-secondary { border: 1px solid var(--line); background: var(--panel); }
+  fieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
   fieldset:disabled button { opacity: .55; cursor: wait; }
-  #status { margin: 0; }
-  #status:not(:empty) { margin-top: 16px; }
-  .result { margin: 16px 0 0; }
-  .error { display: block; color: var(--error); font-weight: 400; }
-  details { margin-top: 19px; color: var(--sub); font-size: .86rem; }
-  summary { cursor: pointer; }
-  code { overflow-wrap: anywhere; }
+  .content { display: flex; flex-direction: column; min-height: 580px; }
+  .content-header { padding: 22px 24px 16px; border-bottom: 1px solid var(--line); }
+  .content-header h1 { margin: 0; font-size: 21px; line-height: 1.3; letter-spacing: -.025em; }
+  #status { margin: 6px 0 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  #status:empty { display: none; }
+  #results { flex: 1; display: grid; align-content: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 12px; padding: 20px 24px; }
+  .result { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #fcfdfc; }
+  .result > span:first-child { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 680; }
+  .result textarea { min-height: 100px; max-height: 58vh; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .result:has(textarea[rows="1"]) textarea { min-height: 42px; }
+  .error { display: block; color: var(--danger); font-size: 13px; }
+  #results details { grid-column: 1 / -1; padding: 13px 14px; border: 1px solid var(--line); border-radius: 10px; }
+  #results details summary { cursor: pointer; font-weight: 650; }
+  #results details textarea { min-height: 260px; max-height: 65vh; }
+  .empty-state { display: grid; flex: 1; place-items: center; padding: 28px; text-align: center; color: var(--muted); }
+  .empty-state p { max-width: 390px; margin: 0; }
+  details.help { max-width: 1440px; margin: 0 auto 20px; padding: 0 18px; color: var(--muted); font-size: 13px; }
+  details.help summary { cursor: pointer; }
+  details.help ul { padding-left: 20px; }
+  details.help li { margin: 6px 0; }
+  [hidden] { display: none !important; }
+  @media (max-width: 800px) {
+    .topbar { padding: 0 16px; }
+    .topbar p { display: none; }
+    .workspace { grid-template-columns: 1fr; gap: 12px; padding: 12px; }
+    .content { min-height: 420px; }
+    #results { padding: 14px; }
+    .content-header { padding: 17px 18px 13px; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <div class="topbar"><button class="secondary" id="language" type="button" aria-label="Switch language">English</button></div>
-  <header>
-    <h1 data-i18n="title">Termark Local Decryption Tool</h1>
-    <p data-i18n="intro">Decrypt Termark data locally in your browser. Files, keys, and results stay on this device.</p>
-  </header>
-  <form id="form" autocomplete="off">
-    <fieldset id="controls">
-      <label><span data-i18n="source">Source</span>
-        <select id="source"><option value="database">Termark database</option><option value="sync">Sync snapshot (.dat)</option><option value="field">Single encrypted field</option></select>
-      </label>
-      <div id="database-inputs">
-        <label><span data-i18n="database">Database</span>
-          <input id="database" type="file" accept=".db,.bolt,.bbolt">
-          <span class="hint" data-i18n="database-hint">Quit Termark first, then choose a copy of <code>termark.db</code>.</span>
-        </label>
-        <label><span data-i18n="find-record">Find a host or credential</span> <input id="filter" type="search" placeholder="Name or IP address"></label>
-        <label><span data-i18n="record">Record</span> <select id="target"><option value="">Choose a database first</option></select></label>
-      </div>
-      <div id="field-inputs" hidden>
-        <label><span data-i18n="encrypted-field">Encrypted field</span> <textarea id="ciphertext" rows="3" placeholder="enc:v1:…" spellcheck="false"></textarea></label>
-      </div>
-      <div id="sync-inputs" hidden>
-        <label><span data-i18n="sync-snapshot">Sync snapshot</span>
-          <input id="sync-file" type="file">
-          <span class="hint" data-i18n="sync-hint">Choose a Termark sync file (.dat or .json). If saved in Keychain, the sync password entry is named <code>sync-passphrase</code>.</span>
-        </label>
-      </div>
-      <label id="key-type"><span data-i18n="key-type">Key type</span>
-        <select id="mode">
-          <option value="raw">32-byte local data key</option>
-          <option value="passphrase">Local encryption passphrase (derive parameters from database)</option>
-        </select>
-      </label>
-      <label><span id="secret-label">Local data key</span>
-        <input id="secret" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" required>
-      </label>
-      <div class="actions">
-        <button type="submit" data-i18n="decrypt">Decrypt</button>
-        <button class="secondary" id="clear" type="button" data-i18n="clear">Clear key and results</button>
-      </div>
-    </fieldset>
-    <p id="status" role="status"></p>
+<header class="topbar">
+  <div class="brand"><span class="brand-mark" aria-hidden="true">T</span><span data-i18n="title">Termark Local Decryption Tool</span></div>
+  <p data-i18n="intro">Decrypt Termark data locally in your browser. Files, keys, and results stay on this device.</p>
+  <button class="lang-button" id="language" type="button" aria-label="Switch language">中文</button>
+</header>
+<div class="workspace">
+  <aside class="sidebar" aria-label="Decryption controls">
+    <form id="form" autocomplete="off">
+      <fieldset id="controls">
+        <section class="panel-section">
+          <h2 class="section-heading" data-i18n="input-heading">Input</h2>
+          <label><span data-i18n="source">Source</span>
+            <select id="source"><option value="database">Termark database</option><option value="sync">Sync snapshot (.dat)</option><option value="field">Single encrypted field</option></select>
+          </label>
+          <div id="database-inputs">
+            <label><span data-i18n="database">Database</span>
+              <input id="database" type="file" accept=".db,.bolt,.bbolt">
+              <span class="hint" data-i18n="database-hint">Quit Termark first, then choose a copy of <code>termark.db</code>.</span>
+            </label>
+            <label><span data-i18n="find-record">Find a host or credential</span> <input id="filter" type="search" placeholder="Name or IP address"></label>
+            <label><span data-i18n="record">Record to decrypt</span> <select id="target" size="7"><option value="">Choose a database first</option></select></label>
+          </div>
+          <div id="field-inputs" hidden>
+            <label><span data-i18n="encrypted-field">Encrypted field</span> <textarea id="ciphertext" rows="4" placeholder="enc:v1:…" spellcheck="false"></textarea></label>
+          </div>
+          <div id="sync-inputs" hidden>
+            <label><span data-i18n="sync-snapshot">Sync snapshot</span>
+              <input id="sync-file" type="file">
+              <span class="hint" data-i18n="sync-hint">Choose a Termark sync file (.dat or .json). If saved in Keychain, the sync password entry is named <code>sync-passphrase</code>.</span>
+            </label>
+          </div>
+        </section>
+        <section class="panel-section">
+          <h2 class="section-heading" data-i18n="key-heading">Key</h2>
+          <label id="key-type"><span data-i18n="key-type-label">Key type</span>
+            <select id="mode">
+              <option value="raw">32-byte local data key</option>
+              <option value="passphrase">Local encryption passphrase (derive parameters from database)</option>
+            </select>
+          </label>
+          <label><span id="secret-label">Local data key</span>
+            <input id="secret" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" required>
+          </label>
+          <div class="actions">
+            <button class="button-primary" type="submit" data-i18n="decrypt">Decrypt</button>
+            <button class="button-secondary" id="clear" type="button" data-i18n="clear">Clear</button>
+          </div>
+        </section>
+      </fieldset>
+    </form>
+  </aside>
+  <section class="content" aria-live="polite">
+    <div class="content-header">
+      <h1 data-i18n="results-heading">Decrypted data</h1>
+      <p id="status" role="status"></p>
+    </div>
     <div id="results"></div>
-  </form>
-  <details>
-    <summary data-i18n="where">Where to find the database and keys</summary>
-    <ul>
-      <li data-i18n="path-mac">On macOS, the database is usually at <code>~/Library/Application Support/Termark/backend/termark.db</code>.</li>
-      <li data-i18n="path-win">On Windows, the installed build usually stores it in <code>%AppData%\Termark\backend</code>. The portable build uses the <code>data</code> folder beside the app.</li>
-      <li data-i18n="keychain">The system keychain service is <code>termark.app</code>. The installed build uses <code>local-data-key</code>; the portable build caches <code>portable-local-data-key</code>.</li>
-    </ul>
-  </details>
-</main>
+    <div class="empty-state" id="empty-state"><p data-i18n="empty">Choose a database or sync snapshot, enter its key, and decrypt to see the saved hosts and credentials here.</p></div>
+  </section>
+</div>
+<details class="help">
+  <summary data-i18n="where">Where to find the database and keys</summary>
+  <ul>
+    <li data-i18n="path-mac">On macOS, the database is usually at <code>~/Library/Application Support/Termark/backend/termark.db</code>.</li>
+    <li data-i18n="path-win">On Windows, the installed build usually stores it in <code>%AppData%\Termark\backend</code>. The portable build uses the <code>data</code> folder beside the app.</li>
+    <li data-i18n="keychain">The system keychain service is <code>termark.app</code>. The installed build uses <code>local-data-key</code>; the portable build caches <code>portable-local-data-key</code>.</li>
+  </ul>
+</details>
 <!-- @noble/hashes 2.4.0
 The MIT License (MIT)
 
@@ -1186,6 +1237,11 @@ THE SOFTWARE.-->
   var translations = {
     zh: {
       title: "Termark \u672C\u5730\u89E3\u5BC6\u5DE5\u5177",
+      "input-heading": "\u8F93\u5165\u6570\u636E",
+      "key-heading": "\u5BC6\u94A5",
+      "key-type-label": "\u5BC6\u94A5\u7C7B\u578B",
+      "results-heading": "\u89E3\u5BC6\u7ED3\u679C",
+      empty: "\u9009\u62E9\u6570\u636E\u5E93\u6216\u540C\u6B65\u5FEB\u7167\uFF0C\u8F93\u5165\u5BC6\u94A5\u5E76\u89E3\u5BC6\uFF0C\u4E3B\u673A\u548C\u51ED\u8BC1\u4F1A\u663E\u793A\u5728\u8FD9\u91CC\u3002",
       intro: "\u5728\u6D4F\u89C8\u5668\u4E2D\u672C\u5730\u89E3\u5BC6 Termark \u6570\u636E\u3002\u6587\u4EF6\u3001\u5BC6\u94A5\u548C\u7ED3\u679C\u4FDD\u7559\u5728\u6B64\u8BBE\u5907\u4E0A\u3002",
       source: "\u89E3\u5BC6\u6765\u6E90",
       database: "\u6570\u636E\u5E93",
@@ -1255,6 +1311,11 @@ THE SOFTWARE.-->
     },
     en: {
       title: "Termark Local Decryption Tool",
+      "input-heading": "Input",
+      "key-heading": "Key",
+      "key-type-label": "Key type",
+      "results-heading": "Decrypted data",
+      empty: "Choose a database or sync snapshot, enter its key, and decrypt to see the saved hosts and credentials here.",
       intro: "Decrypt Termark data locally in your browser. Files, keys, and results stay on this device.",
       source: "Source",
       database: "Database",
@@ -1331,7 +1392,7 @@ THE SOFTWARE.-->
     document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
     document.querySelectorAll("[data-i18n]").forEach((element) => element.innerHTML = t(element.dataset.i18n));
     document.getElementById("language").textContent = language === "zh" ? "English" : "\u4E2D\u6587";
-    document.getElementById("language").setAttribute("aria-label", language === "zh" ? "\u5207\u6362\u8BED\u8A00" : "Switch language");
+    document.getElementById("language").setAttribute("aria-label", language === "zh" ? "\u5207\u6362\u5230\u82F1\u6587" : "Switch to Chinese");
     document.getElementById("filter").placeholder = t("search");
     document.getElementById("ciphertext").placeholder = "enc:v1:\u2026";
     document.getElementById("mode").options[0].textContent = language === "zh" ? "32 \u5B57\u8282\u672C\u5730\u6570\u636E\u5BC6\u94A5" : "32-byte local data key";
@@ -1345,7 +1406,8 @@ THE SOFTWARE.-->
     if (secretLabel.dataset.key) secretLabel.textContent = t(secretLabel.dataset.key);
     if (secret.dataset.placeholderKey) secret.placeholder = t(secret.dataset.placeholderKey);
     document.querySelectorAll("#results .result[data-label-key] > span:first-child").forEach((element) => {
-      element.textContent = t(element.parentElement.dataset.labelKey);
+      const result = element.parentElement;
+      element.textContent = [result.dataset.prefix, t(result.dataset.labelKey)].filter(Boolean).join(" \xB7 ");
     });
     const fullJsonSummary = document.querySelector("#results details summary");
     if (fullJsonSummary) fullJsonSummary.textContent = t("full-json");
@@ -1504,7 +1566,7 @@ THE SOFTWARE.-->
       const label = [host.name || address || id, address && address !== host.name ? address : ""].filter(Boolean).join(" \xB7 ");
       return { kind: "host", name: label, fields: [
         ...fields(host, hostFields),
-        ...bound?.fields.map((field) => ({ ...field, label: bound.label + " \xB7 " + field.label })) || []
+        ...bound?.fields.map((field) => ({ ...field, prefix: bound.label })) || []
       ] };
     });
     for (const credential of credentials.values()) {
@@ -1561,6 +1623,7 @@ THE SOFTWARE.-->
     }
   }
   function showSnapshot(snapshot) {
+    get("empty-state").hidden = true;
     const data = [snapshot, snapshot?.data, snapshot?.snapshot].find(
       (item) => item && (item.hosts || item.credentials)
     );
@@ -1665,6 +1728,7 @@ THE SOFTWARE.-->
   var busy = false;
   function clearResults() {
     results.replaceChildren();
+    get("empty-state").hidden = false;
     status.textContent = "";
   }
   function updateChoices() {
@@ -1729,7 +1793,10 @@ THE SOFTWARE.-->
     if (clear) clearResults();
   }
   get("source").addEventListener("change", updateSource);
-  get("language").addEventListener("click", () => setLanguage(language === "zh" ? "en" : "zh"));
+  get("language").addEventListener("click", () => {
+    const current = document.documentElement.lang.startsWith("zh") ? "zh" : "en";
+    setLanguage(current === "zh" ? "en" : "zh");
+  });
   mode.addEventListener("change", updateMode);
   get("sync-file").addEventListener("change", clearResults);
   get("clear").addEventListener("click", () => {
@@ -1775,13 +1842,15 @@ THE SOFTWARE.-->
       if (current?.check) {
         requireFormat(await decryptField(key, current.check) === checkText, t("key-check"));
       }
+      get("empty-state").hidden = true;
       let count = 0;
       for (const field of encrypted) {
         const label = document.createElement("label");
         label.className = "result";
         label.dataset.labelKey = field.labelKey || "plaintext";
+        label.dataset.prefix = field.prefix || "";
         const heading = document.createElement("span");
-        heading.textContent = t(label.dataset.labelKey);
+        heading.textContent = [label.dataset.prefix, t(label.dataset.labelKey)].filter(Boolean).join(" \xB7 ");
         label.append(heading);
         try {
           const plaintext = await decryptField(key, field.value);
