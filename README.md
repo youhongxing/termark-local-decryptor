@@ -1,6 +1,6 @@
 # Termark Local Decryption Tool | Termark 本地解密工具
 
-在浏览器中解密 Termark 本地数据库或云同步 `.dat` 快照，查看主机、凭证及相关敏感字段。
+在浏览器中解密 Termark 本地数据库或云同步 `.dat` 快照。页面提供文件与密钥配置、可搜索的记录列表、详情三栏视图，并支持中英文和窄屏布局。
 
 **在线使用：** <https://youhongxing.github.io/termark-local-decryptor/>
 
@@ -33,7 +33,7 @@ macOS 本地数据库默认位于 `~/Library/Application Support/Termark/backend
 
 ## English
 
-Decrypt Termark local databases and cloud sync `.dat` snapshots in your browser.
+Decrypt Termark local databases and cloud sync `.dat` snapshots in your browser. The interface has a searchable three-pane record view, bilingual controls, and responsive layouts.
 
 **Open the tool:** <https://youhongxing.github.io/termark-local-decryptor/>
 
