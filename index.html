@@ -1850,9 +1850,9 @@ THE SOFTWARE.-->
     get("toggle-secrets").textContent = t("show-secrets");
     renderRecords();
     setStatus("");
-    get("empty-state").hidden = false;
-    get("empty-state").querySelector("h3").textContent = t("empty-title");
-    get("empty-state").querySelector("p").textContent = t("empty-copy");
+    get("detail-empty").hidden = false;
+    get("detail-empty").querySelector("h3").textContent = t("empty-title");
+    get("detail-empty").querySelector("p").textContent = t("empty-copy");
   }
   file.addEventListener("change", async () => {
     const sequence = ++fileSequence;
